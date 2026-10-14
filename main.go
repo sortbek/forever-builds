@@ -8,10 +8,14 @@ import (
 	"github.com/wowsims/forever/sim"
 )
 
-func main() {
+// Registers every spec's agent factory; in init so the tests get it too.
+func init() {
 	sim.RegisterAll()
+}
+
+func main() {
 	root := &cobra.Command{Use: "simhammer-forever", SilenceUsage: true, SilenceErrors: true}
-	root.AddCommand(newVersionCmd())
+	root.AddCommand(newVersionCmd(), newSimCmd())
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
