@@ -30,6 +30,7 @@ type dbJSON struct {
 	SpellIcons []struct {
 		ID   int    `json:"id"`
 		Name string `json:"name"`
+		Icon string `json:"icon"`
 	} `json:"spellIcons"`
 }
 
@@ -88,8 +89,10 @@ func main() {
 	}
 	write(*out, "enchants.json", enchants)
 	icons := make([]named, 0, len(db.SpellIcons))
+	spellIcons := map[int]string{}
 	for _, s := range db.SpellIcons {
 		icons = append(icons, named{s.ID, s.Name})
+		spellIcons[s.ID] = s.Icon
 	}
 	spellNames, err := loadSpellNames(filepath.Join(*wago, "SpellName.csv"))
 	if err != nil {
@@ -107,7 +110,7 @@ func main() {
 	}
 	talents := map[string]*ClassTalents{}
 	for class := range classIDs {
-		ct, err := buildClassTalents(class, filepath.Join(*engine, "ui/sim/talents/trees", class+".json"), tables)
+		ct, err := buildClassTalents(class, filepath.Join(*engine, "ui/sim/talents/trees", class+".json"), tables, spellIcons)
 		if err != nil {
 			log.Fatal(err)
 		}

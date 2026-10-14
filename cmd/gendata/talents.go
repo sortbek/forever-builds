@@ -26,6 +26,23 @@ type ClassTalents struct {
 	Nodes     []TalentNode      `json:"nodes"`
 	Talents   map[string][2]int `json:"talents"`
 	TreeSizes []int             `json:"tree_sizes"`
+	Trees     []TreeLayout      `json:"trees"`
+}
+
+// The talent calculator layout, in the engine's talent-string order.
+type TreeLayout struct {
+	Name    string         `json:"name"`
+	Talents []TalentLayout `json:"talents"`
+}
+
+type TalentLayout struct {
+	Name     string  `json:"name"`
+	SpellID  int     `json:"spell_id"`
+	Icon     string  `json:"icon"`
+	Row      int     `json:"row"`
+	Col      int     `json:"col"`
+	MaxRanks int     `json:"max_ranks"`
+	Prereq   *[2]int `json:"prereq,omitempty"` // [row, col] of the talent it needs
 }
 
 // ChrClasses ids, as ChrSpecialization.ClassID uses them.
@@ -102,14 +119,25 @@ func loadTraitTables(dir string) (*traitTables, error) {
 	return t, nil
 }
 
+type engineLocation struct {
+	Row int `json:"rowIdx"`
+	Col int `json:"colIdx"`
+}
+
 type engineTree struct {
+	Name    string `json:"name"`
 	Talents []struct {
-		DefinitionID int `json:"definitionId"`
+		DefinitionID int             `json:"definitionId"`
+		Name         string          `json:"fancyName"`
+		SpellID      int             `json:"spellId"`
+		MaxPoints    int             `json:"maxPoints"`
+		Location     engineLocation  `json:"location"`
+		Prereq       *engineLocation `json:"prereqLocation"`
 	} `json:"talents"`
 }
 
 // The class's trait tree is the one whose entries carry the most of the engine tree's definition ids.
-func buildClassTalents(class, treeJSON string, t *traitTables) (*ClassTalents, error) {
+func buildClassTalents(class, treeJSON string, t *traitTables, spellIcons map[int]string) (*ClassTalents, error) {
 	data, err := os.ReadFile(treeJSON)
 	if err != nil {
 		return nil, err
@@ -123,12 +151,20 @@ func buildClassTalents(class, treeJSON string, t *traitTables) (*ClassTalents, e
 	defs := map[int]bool{}
 	for ti, tree := range trees {
 		ct.TreeSizes = append(ct.TreeSizes, len(tree.Talents))
+		layout := TreeLayout{Name: tree.Name}
 		for i, tal := range tree.Talents {
 			if tal.DefinitionID != 0 {
 				ct.Talents[strconv.Itoa(tal.DefinitionID)] = [2]int{ti, i}
 				defs[tal.DefinitionID] = true
 			}
+			tl := TalentLayout{Name: tal.Name, SpellID: tal.SpellID, Icon: spellIcons[tal.SpellID],
+				Row: tal.Location.Row, Col: tal.Location.Col, MaxRanks: tal.MaxPoints}
+			if tal.Prereq != nil {
+				tl.Prereq = &[2]int{tal.Prereq.Row, tal.Prereq.Col}
+			}
+			layout.Talents = append(layout.Talents, tl)
 		}
+		ct.Trees = append(ct.Trees, layout)
 	}
 	bestTree, bestHits := 0, 0
 	for tree, nodeIDs := range t.nodesByTree {
