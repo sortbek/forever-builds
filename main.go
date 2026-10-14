@@ -15,7 +15,7 @@ func init() {
 
 func main() {
 	root := &cobra.Command{Use: "simhammer-forever", SilenceUsage: true, SilenceErrors: true}
-	root.AddCommand(newVersionCmd(), newSimCmd())
+	root.AddCommand(newVersionCmd(), newSimCmd(), newBulkCmd())
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
