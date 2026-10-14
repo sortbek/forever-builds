@@ -12,13 +12,15 @@ import (
 
 type dbJSON struct {
 	Items []struct {
-		ID                  int                                           `json:"id"`
-		Name                string                                        `json:"name"`
-		Icon                string                                        `json:"icon"`
-		Type                int                                           `json:"type"`
-		Quality             int                                           `json:"quality"`
-		ScalingOptions      map[string]struct{ Ilvl int `json:"ilvl"` } `json:"scalingOptions"`
-		RandomSuffixOptions []int                                         `json:"randomSuffixOptions"`
+		ID             int    `json:"id"`
+		Name           string `json:"name"`
+		Icon           string `json:"icon"`
+		Type           int    `json:"type"`
+		Quality        int    `json:"quality"`
+		ScalingOptions map[string]struct {
+			Ilvl int `json:"ilvl"`
+		} `json:"scalingOptions"`
+		RandomSuffixOptions []int `json:"randomSuffixOptions"`
 	} `json:"items"`
 	Enchants []struct {
 		EffectID int    `json:"effectId"`
@@ -71,19 +73,24 @@ func main() {
 		items = append(items, item{it.ID, it.Name, it.Icon, it.Type, it.Quality, it.ScalingOptions["0"].Ilvl, len(it.RandomSuffixOptions) > 0})
 	}
 	write(*out, "items.json", items)
-	type named struct {
-		ID   int    `json:"id"`
-		Name string `json:"name"`
-	}
 	enchants := make([]named, 0, len(db.Enchants))
 	for _, e := range db.Enchants {
 		enchants = append(enchants, named{e.EffectID, e.Name})
 	}
 	write(*out, "enchants.json", enchants)
-	spells := make([]named, 0, len(db.SpellIcons))
+	icons := make([]named, 0, len(db.SpellIcons))
 	for _, s := range db.SpellIcons {
-		spells = append(spells, named{s.ID, s.Name})
+		icons = append(icons, named{s.ID, s.Name})
 	}
+	spellNames, err := loadSpellNames(filepath.Join(*wago, "SpellName.csv"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	used, err := engineSpellIDs(filepath.Join(*engine, "sim"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	spells := spellList(icons, spellNames, used)
 	write(*out, "spells.json", spells)
 	tables, err := loadTraitTables(*wago)
 	if err != nil {
