@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -26,6 +27,8 @@ var specDirs = map[string]string{
 	"dpsWarrior":         "warrior/dps",
 	"protectionWarrior":  "warrior/protection",
 }
+
+var errUnsupportedSpec = errors.New("healer specs can't be simmed yet")
 
 var tankSpecs = map[string]bool{"feralBearDruid": true, "protectionPaladin": true, "protectionWarrior": true}
 
