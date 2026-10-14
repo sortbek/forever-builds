@@ -12,4 +12,5 @@ CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -tags with_db \
   -ldflags "-s -w -X main.Version=$(date -u +%Y%m%d) -X main.EngineCommit=$COMMIT -X main.ClientBuild=$BUILD" \
   -o "$STAGE/$BIN" .
 cp -r dist/data "$STAGE/data"
+chmod 755 "$STAGE/$BIN"
 if [ "$GOOS" = windows ]; then (cd "$STAGE" && zip -qr "../$NAME" .); else tar -czf "dist/$NAME" -C "$STAGE" .; fi
