@@ -1,0 +1,58 @@
+name: release
+on:
+  schedule: [{ cron: "0 7 * * *" }]
+  workflow_dispatch:
+    inputs:
+      engine_ref: { description: "Engine commit (empty: upstream master)", required: false }
+permissions: { contents: write }
+concurrency: { group: release, cancel-in-progress: false }
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.25.4" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - uses: arduino/setup-protoc@v3
+        with: { version: "29.3", repo-token: "${{ secrets.GITHUB_TOKEN }}" }
+      - run: go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
+      - run: npm ci
+      - name: Pick engine commit
+        run: |
+          REF="${{ inputs.engine_ref }}"
+          [ -z "$REF" ] && REF=$(git ls-remote https://github.com/ElliotWood/Forever.git refs/heads/master | cut -f1)
+          echo "$REF" > ENGINE_REF
+      - run: bash scripts/sync-engine.sh
+      - name: Rotation choice unchanged upstream
+        run: |
+          if ! git diff --exit-code rotation-lock.json; then
+            echo "::error::An autoRotation changed upstream. Re-port rotation.go, then commit rotation-lock.json."
+            exit 1
+          fi
+      - run: bash scripts/fetch-wago.sh
+      - run: go test -tags with_db ./...
+      - run: go run ./cmd/gendata -commit $(git -C engine rev-parse --short HEAD)
+      - name: Skip when this engine commit is already released
+        id: tag
+        run: |
+          SHA=$(git -C engine rev-parse --short HEAD)
+          echo "tag=forever-$(date -u +%Y%m%d)-$SHA" >> "$GITHUB_OUTPUT"
+          if gh release list --limit 50 | grep -q -- "-$SHA"; then echo "skip=1" >> "$GITHUB_OUTPUT"; fi
+        env: { GH_TOKEN: "${{ github.token }}" }
+      - if: steps.tag.outputs.skip != '1'
+        run: |
+          bash scripts/package.sh windows amd64 simhammer-forever-windows-x64.zip
+          bash scripts/package.sh linux amd64 simhammer-forever-linux-x64.tar.gz
+          bash scripts/package.sh linux arm64 simhammer-forever-linux-arm64.tar.gz
+          bash scripts/package.sh darwin arm64 simhammer-forever-macos-arm64.tar.gz
+          bash scripts/package.sh darwin amd64 simhammer-forever-macos-x64.tar.gz
+      - if: steps.tag.outputs.skip != '1'
+        run: |
+          gh release create "${{ steps.tag.outputs.tag }}" dist/*.zip dist/*.tar.gz \
+            --title "${{ steps.tag.outputs.tag }}" \
+            --notes "Engine ElliotWood/Forever@$(cat ENGINE_REF), client build $(cat wago/BUILD)"
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add ENGINE_REF && git commit -m "chore: engine $(cut -c1-7 ENGINE_REF)" && git push || true
+        env: { GH_TOKEN: "${{ github.token }}" }
