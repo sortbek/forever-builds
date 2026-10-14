@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 BUILD=$(tr -d '[:space:]' < engine/assets/db_inputs/forever_client_build.txt)
 mkdir -p wago
-for t in TraitNode TraitNodeEntry TraitNodeXTraitNodeEntry ChrSpecialization SpellName; do
+for t in TraitNode TraitNodeEntry TraitNodeXTraitNodeEntry ChrSpecialization SpellName Item ItemModifiedAppearance ItemAppearance; do
   curl -fsS -A "simhammer-forever-builds" -o "wago/$t.csv" "https://wago.tools/db2/$t/csv?build=$BUILD"
 done
 echo "$BUILD" > wago/BUILD

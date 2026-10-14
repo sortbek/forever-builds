@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -68,9 +69,17 @@ func main() {
 		Ilvl    int    `json:"ilvl"`
 		Suffix  bool   `json:"suffix,omitempty"`
 	}
+	iconIDs, err := loadIconFileIDs(*wago)
+	if err != nil {
+		log.Fatal(err)
+	}
 	items := make([]item, 0, len(db.Items))
 	for _, it := range db.Items {
-		items = append(items, item{it.ID, it.Name, it.Icon, it.Type, it.Quality, it.ScalingOptions["0"].Ilvl, len(it.RandomSuffixOptions) > 0})
+		icon := it.Icon
+		if icon == "" && iconIDs[it.ID] > 0 {
+			icon = strconv.Itoa(iconIDs[it.ID]) // a FileDataID; the icon CDN serves those by number
+		}
+		items = append(items, item{it.ID, it.Name, icon, it.Type, it.Quality, it.ScalingOptions["0"].Ilvl, len(it.RandomSuffixOptions) > 0})
 	}
 	write(*out, "items.json", items)
 	enchants := make([]named, 0, len(db.Enchants))
