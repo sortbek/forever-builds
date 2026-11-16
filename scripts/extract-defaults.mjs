@@ -27,6 +27,23 @@ const SPECS = {
 const KEYS = ['specOptions', 'consumables', 'raidBuffs', 'partyBuffs', 'individualBuffs', 'debuffs', 'other', 'talents'];
 const ROTATION_KEYS = ['autoRotation', 'rotationType', 'aplRotation'];
 
+// tsconfig path aliases ('@sim/*' -> ui/sim/*).
+const ALIASES = Object.entries(
+	ts.parseConfigFileTextToJson('tsconfig.json', fs.readFileSync(path.join(engineDir, 'tsconfig.json'), 'utf8')).config.compilerOptions.paths,
+).map(([from, [to]]) => [from.slice(0, -1), path.resolve(engineDir, to.slice(0, -1))]);
+
+function importFile(sf, spec) {
+	let base;
+	if (spec.startsWith('.')) base = path.resolve(path.dirname(sf.fileName), spec);
+	else {
+		const alias = ALIASES.find(([from]) => spec.startsWith(from));
+		if (!alias) return null;
+		base = path.join(alias[1], spec.slice(alias[0].length));
+	}
+	const file = /\.(ts|json)$/.test(base) ? base : `${base}.ts`;
+	return fs.existsSync(file) ? file : null;
+}
+
 const files = new Map();
 function source(file) {
 	if (!files.has(file)) {
@@ -46,8 +63,10 @@ function imports(sf) {
 	for (const st of sf.statements) {
 		if (!ts.isImportDeclaration(st) || !st.importClause) continue;
 		const spec = st.moduleSpecifier.text;
-		if (!spec.startsWith('.')) continue;
-		const file = path.resolve(path.dirname(sf.fileName), spec.endsWith('.ts') ? spec : `${spec}.ts`);
+		const file = importFile(sf, spec);
+		if (!file) continue;
+		if (st.importClause.name && file.endsWith('.json')) out.set(st.importClause.name.text, { file, name: 'json' });
+		if (file.endsWith('.json')) continue;
 		const nb = st.importClause.namedBindings;
 		if (nb && ts.isNamespaceImport(nb)) out.set(nb.name.text, { file, name: '*' });
 		if (nb && ts.isNamedImports(nb)) {
@@ -75,6 +94,9 @@ function resolveName(sf, name) {
 	return resolveName(source(imp.file), imp.name);
 }
 
+// Argument values of the local helper calls being evaluated, innermost last.
+const scopes = [];
+
 function evaluate(sf, node) {
 	if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isSatisfiesExpression(node)) return evaluate(sf, node.expression);
 	if (ts.isNumericLiteral(node)) return Number(node.text);
@@ -100,13 +122,32 @@ function evaluate(sf, node) {
 		// Message.create({...}) / Message.create()
 		if (fn === 'create') return node.arguments.length ? evaluate(sf, node.arguments[0]) : {};
 	}
+	// helper(args) where helper is a top-level arrow function with an expression body.
+	if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+		const hit = resolveName(sf, node.expression.text);
+		if (hit && ts.isArrowFunction(hit[1]) && !ts.isBlock(hit[1].body)) {
+			const args = node.arguments.map(a => evaluate(sf, a));
+			scopes.push(new Map(hit[1].parameters.map((p, i) => [p.name.getText(hit[0]), args[i]])));
+			try {
+				return evaluate(hit[0], hit[1].body);
+			} finally {
+				scopes.pop();
+			}
+		}
+	}
 	if (ts.isIdentifier(node)) {
+		const scope = scopes.at(-1);
+		if (scope?.has(node.text)) return scope.get(node.text);
+		const json = imports(sf).get(node.text);
+		if (json?.name === 'json') return JSON.parse(fs.readFileSync(json.file, 'utf8'));
 		const hit = resolveName(sf, node.text);
 		if (!hit) fail(sf, node, 'unresolved identifier');
 		return evaluate(hit[0], hit[1]);
 	}
 	if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression)) {
+		if (scopes.at(-1)?.has(node.expression.text)) return evaluate(sf, node.expression)[node.name.text];
 		const imp = imports(sf).get(node.expression.text);
+		if (imp?.name === 'json') return evaluate(sf, node.expression)[node.name.text];
 		if (imp && imp.name === '*') {
 			const hit = resolveName(source(imp.file), node.name.text);
 			if (!hit) fail(sf, node, 'unresolved export');

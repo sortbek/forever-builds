@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 REF=$(tr -d '[:space:]' < ENGINE_REF)
 if [ ! -d engine/.git ]; then
   git init -q engine
-  git -C engine remote add origin https://github.com/ElliotWood/Forever.git
+  git -C engine remote add origin https://github.com/wowsims/forever.git
 fi
 git -C engine fetch -q --depth 1 origin "$REF"
 git -C engine checkout -q FETCH_HEAD

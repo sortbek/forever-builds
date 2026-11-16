@@ -22,7 +22,7 @@ jobs:
       - name: Pick engine commit
         run: |
           REF="${{ inputs.engine_ref }}"
-          [ -z "$REF" ] && REF=$(git ls-remote https://github.com/ElliotWood/Forever.git refs/heads/master | cut -f1)
+          [ -z "$REF" ] && REF=$(git ls-remote https://github.com/wowsims/forever.git refs/heads/master | cut -f1)
           echo "$REF" > ENGINE_REF
       - run: bash scripts/sync-engine.sh
       # A new engine commit can add or bump modules; the local replace needs them in go.sum.
@@ -54,7 +54,7 @@ jobs:
         run: |
           gh release create "${{ steps.tag.outputs.tag }}" dist/*.zip dist/*.tar.gz \
             --title "${{ steps.tag.outputs.tag }}" \
-            --notes "Engine ElliotWood/Forever@$(cat ENGINE_REF), client build $(cat wago/BUILD)"
+            --notes "Engine wowsims/forever@$(cat ENGINE_REF), client build $(cat wago/BUILD)"
           git config user.name "github-actions" && git config user.email "actions@github.com"
           git add ENGINE_REF go.mod go.sum && git commit -m "chore: engine $(cut -c1-7 ENGINE_REF)" && git push || true
         env: { GH_TOKEN: "${{ github.token }}" }
