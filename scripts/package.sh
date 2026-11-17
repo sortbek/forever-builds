@@ -8,6 +8,7 @@ STAGE=dist/stage-$TARGET
 rm -rf "$STAGE" && mkdir -p "$STAGE"
 cp "target/$TARGET/release/$BIN" "$STAGE/$BIN"
 cp -r dist/data "$STAGE/data"
+cp LICENSE NOTICE.md "$STAGE/"
 chmod 755 "$STAGE/$BIN"
 case "$NAME" in
   *.zip) (cd "$STAGE" && 7z a -tzip -bso0 "../$NAME" .) ;;
