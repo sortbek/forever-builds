@@ -8,7 +8,6 @@ use std::{
         Mutex,
     },
     thread,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use serde_json::{json, Value};
@@ -184,13 +183,6 @@ pub fn run(mut request: Value, max_combinations: usize) -> Result<Value, String>
         return Err("bulk request has no baseRequest".into());
     }
     defaults::apply(&mut base)?;
-    // One seed for every gear set, so the sets differ by their gear and not by their luck.
-    if base["simOptions"].get("randomSeed").is_none() {
-        let seed = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(1, |d| d.subsec_nanos());
-        base["simOptions"]["randomSeed"] = json!(seed.to_string());
-    }
     let iterations = base["simOptions"]["iterations"]
         .as_u64()
         .unwrap_or(defaults::DEFAULT_ITERATIONS);

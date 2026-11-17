@@ -1,7 +1,10 @@
 //! Fills a request with its build's defaults: spec options, consumables, buffs, debuffs, the
 //! target and the rotation. SimHammer sends only the character, gear, talents and fight settings.
 
-use std::sync::OnceLock;
+use std::{
+    sync::OnceLock,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use serde_json::{json, Map, Value};
 
@@ -143,6 +146,13 @@ pub fn apply(request: &mut Value) -> Result<(), String> {
         == 0
     {
         sim_options.insert("iterations".into(), json!(DEFAULT_ITERATIONS));
+    }
+    // The engine wants a seed; a bulk sim then runs every gear set on this one.
+    if !sim_options.contains_key("randomSeed") {
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(1, |d| d.subsec_nanos().max(1));
+        sim_options.insert("randomSeed".into(), json!(seed.to_string()));
     }
     fill(&mut request["encounter"], &defaults["encounter"]);
 

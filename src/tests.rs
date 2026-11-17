@@ -166,6 +166,17 @@ fn what_the_request_sets_is_kept() {
 }
 
 #[test]
+fn a_request_without_a_seed_sims() {
+    let mut req = request("frost-mage", &talents("mage", 2), 200);
+    req["simOptions"]
+        .as_object_mut()
+        .unwrap()
+        .remove("randomSeed");
+    defaults::apply(&mut req).unwrap();
+    engine::simulate(&req).unwrap();
+}
+
+#[test]
 fn a_dagger_combat_rogue_backstabs() {
     let dagger = defaults::items()
         .as_object()
