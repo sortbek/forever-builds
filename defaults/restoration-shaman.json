@@ -1,0 +1,104 @@
+{
+	"debuffs": {
+		"curseOfElements": true,
+		"judgementOfWisdom": true
+	},
+	"encounter": {
+		"duration": 180,
+		"durationVariation": 15,
+		"executeProportion20": 0.2,
+		"executeProportion25": 0.25,
+		"executeProportion35": 0.35,
+		"executeProportion45": 0.45,
+		"executeProportion90": 0.9,
+		"targets": [
+			{
+				"canCrush": true,
+				"damageSpread": 0.3333,
+				"id": 213336,
+				"level": 63,
+				"minBaseDamage": 3000,
+				"name": "Level 60",
+				"parryHaste": true,
+				"stats": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					805,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					3731,
+					0,
+					127393,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"swingSpeed": 2
+			}
+		]
+	},
+	"partyBuffs": {
+		"manaSpringTotem": "TristateEffectRegular",
+		"moonkinAura": true
+	},
+	"player": {
+		"buffs": {
+			"greaterBlessingOfKings": true,
+			"greaterBlessingOfWisdom": true
+		},
+		"consumables": {
+			"flaskId": 13511,
+			"potId": 13444,
+			"potions": [
+				13444
+			],
+			"spellPowerElixirId": 250333
+		},
+		"distanceFromTarget": 20,
+		"reactionTimeMs": 100,
+		"restorationShaman": {
+			"options": {
+				"classOptions": {}
+			}
+		}
+	},
+	"raidBuffs": {
+		"arcaneBrilliance": true,
+		"giftOfTheWild": true,
+		"prayerOfFortitude": true,
+		"prayerOfSpirit": true
+	},
+	"rotation": "shaman/restoration/default",
+	"specKey": "restorationShaman",
+	"tanks": []
+}

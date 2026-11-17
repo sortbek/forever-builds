@@ -12,7 +12,7 @@ use std::{env, fs, process};
 use serde_json::{json, Value};
 
 const USAGE: &str =
-    "usage: simhammer-forever sim|bulk|options --in REQUEST.json --out RESULT.json [--max-combinations N] | version";
+    "usage: simhammer-forever sim|bulk|compare|options --in REQUEST.json --out RESULT.json [--max-combinations N] | version";
 
 fn read(path: &str) -> Result<Value, String> {
     let text = fs::read_to_string(path).map_err(|e| format!("read request: {e}"))?;
@@ -60,6 +60,7 @@ fn run(args: &[String]) -> Result<(), String> {
         }
         "bulk" => bulk::run(request, max_combinations)?,
         "options" => defaults::options(&request),
+        "compare" => bulk::compare(request)?,
         _ => return Err(USAGE.into()),
     };
     write(&output, &result)

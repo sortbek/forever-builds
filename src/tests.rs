@@ -14,13 +14,13 @@ fn repo(path: &str) -> Value {
 
 fn class_of(spec_key: &str) -> &'static str {
     match spec_key {
-        "balanceDruid" | "feralCatDruid" | "feralBearDruid" => "druid",
+        "balanceDruid" | "feralCatDruid" | "feralBearDruid" | "restorationDruid" => "druid",
         "hunter" => "hunter",
         "mage" => "mage",
-        "protectionPaladin" | "retributionPaladin" => "paladin",
-        "dpsPriest" => "priest",
+        "protectionPaladin" | "retributionPaladin" | "holyPaladin" => "paladin",
+        "dpsPriest" | "healerPriest" => "priest",
         "rogue" => "rogue",
-        "elementalShaman" | "enhancementShaman" => "shaman",
+        "elementalShaman" | "enhancementShaman" | "restorationShaman" => "shaman",
         "warlock" => "warlock",
         _ => "warrior",
     }
@@ -63,7 +63,7 @@ fn request(build: &str, talents: &str, iterations: u64) -> Value {
 }
 
 /// The tree each build's talents sit in.
-const BUILDS: [(&str, usize); 24] = [
+const BUILDS: [(&str, usize); 28] = [
     ("balance-druid", 0),
     ("feral-druid", 1),
     ("feral-bear-druid", 1),
@@ -88,6 +88,10 @@ const BUILDS: [(&str, usize); 24] = [
     ("arms-warrior", 0),
     ("warrior", 1),
     ("protection-warrior", 2),
+    ("holy-paladin", 0),
+    ("holy-priest", 1),
+    ("restoration-druid", 2),
+    ("restoration-shaman", 2),
 ];
 
 #[test]
@@ -116,7 +120,9 @@ fn every_build_sims_with_its_defaults() {
         match outcome {
             Ok(result) => {
                 let unit = &result["raidMetrics"]["parties"][0]["players"][0];
-                let dps = unit["dps"]["avg"].as_f64().unwrap_or(0.0);
+                let dps = unit[defaults::metric_of(&req)]["avg"]
+                    .as_f64()
+                    .unwrap_or(0.0);
                 let pets: f64 = unit["pets"]
                     .as_array()
                     .into_iter()
@@ -227,9 +233,10 @@ fn an_empty_buff_set_stays_empty_at_60() {
 #[test]
 fn options_list_each_spec_with_its_builds_starting_state() {
     let out = defaults::options(
-        &json!({ "specKeys": ["mage", "holyPaladin"], "talentsString": talents("mage", 2), "level": 60 }),
+        &json!({ "specKeys": ["mage", "holyPaladin", "tankDeathKnight"], "talentsString": talents("mage", 2), "level": 60 }),
     );
-    assert!(out.get("holyPaladin").is_none());
+    assert_eq!(out["holyPaladin"]["build"], "holy-paladin");
+    assert!(out.get("tankDeathKnight").is_none());
     let mage = &out["mage"];
     assert_eq!(mage["build"], "frost-mage");
     assert_eq!(mage["consumables"], true);
@@ -302,6 +309,30 @@ fn every_builds_starting_toggles_sim_like_its_defaults() {
 }
 
 #[test]
+fn compare_sims_talent_builds_with_their_own_rotation() {
+    let request = json!({
+        "baseRequest": request("frost-mage", "", 200),
+        "variants": [
+            { "name": "Frost", "talentsString": talents("mage", 2) },
+            { "name": "Fire", "talentsString": talents("mage", 1) },
+            { "name": "Broken", "talentsString": "9999" },
+        ],
+    });
+    let out = bulk::compare(request).unwrap();
+    assert_eq!(out["metric"], "dps");
+    let rows = out["results"].as_array().unwrap();
+    assert_eq!(rows.len(), 3);
+    assert!(rows[0]["metrics"]["avg"].as_f64().unwrap() > 0.0);
+    assert!(rows[1]["metrics"]["avg"].as_f64().unwrap() > 0.0);
+    assert_ne!(rows[0]["metrics"]["avg"], rows[1]["metrics"]["avg"]);
+    assert!(
+        rows[2]["error"].as_str().unwrap().contains("talents"),
+        "{}",
+        rows[2]
+    );
+}
+
+#[test]
 fn a_request_without_a_seed_sims() {
     let mut req = request("frost-mage", &talents("mage", 2), 200);
     req["simOptions"]
@@ -331,11 +362,11 @@ fn a_dagger_combat_rogue_backstabs() {
 }
 
 #[test]
-fn healers_are_refused_by_name() {
-    let mut req = json!({ "raid": { "parties": [{ "players": [{ "holyPaladin": {} }] }] } });
+fn an_unknown_spec_is_refused_by_name() {
+    let mut req = json!({ "raid": { "parties": [{ "players": [{ "tankDeathKnight": {} }] }] } });
     assert_eq!(
         defaults::apply(&mut req).unwrap_err(),
-        "healer specs can't be simmed yet"
+        "the request names no spec this runner knows"
     );
 }
 

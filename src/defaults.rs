@@ -39,7 +39,7 @@ pub fn items() -> &'static Value {
 }
 
 /// The Player.spec oneof names SimHammer may send.
-const SPEC_KEYS: [&str; 14] = [
+const SPEC_KEYS: [&str; 18] = [
     "balanceDruid",
     "feralCatDruid",
     "feralBearDruid",
@@ -54,7 +54,22 @@ const SPEC_KEYS: [&str; 14] = [
     "warlock",
     "dpsWarrior",
     "protectionWarrior",
+    "holyPaladin",
+    "healerPriest",
+    "restorationDruid",
+    "restorationShaman",
 ];
+
+/// "hps" for a healer's request, else "dps": the player metric a comparison ranks by.
+pub fn metric_of(request: &Value) -> &'static str {
+    let player = &request["raid"]["parties"][0]["players"][0];
+    let healer = SPEC_KEYS[14..].iter().any(|key| player.get(*key).is_some());
+    if healer {
+        "hps"
+    } else {
+        "dps"
+    }
+}
 
 /// The first tree with the most points.
 fn primary_tree(talents: &str) -> usize {
@@ -87,6 +102,10 @@ pub fn build_for(spec_key: &str, talents: &str) -> Option<&'static str> {
         ][tree],
         "dpsWarrior" => ["arms-warrior", "warrior", "warrior"][tree],
         "protectionWarrior" => "protection-warrior",
+        "holyPaladin" => "holy-paladin",
+        "healerPriest" => "holy-priest",
+        "restorationDruid" => "restoration-druid",
+        "restorationShaman" => "restoration-shaman",
         _ => return None,
     })
 }
@@ -271,9 +290,10 @@ pub fn apply(request: &mut Value) -> Result<(), String> {
     let spec_key = *SPEC_KEYS
         .iter()
         .find(|key| player.get(**key).is_some())
-        .ok_or("healer specs can't be simmed yet")?;
+        .ok_or("the request names no spec this runner knows")?;
     let talents = player["talentsString"].as_str().unwrap_or("");
-    let build = build_for(spec_key, talents).ok_or("healer specs can't be simmed yet")?;
+    let build =
+        build_for(spec_key, talents).ok_or("the request names no spec this runner knows")?;
     let defaults = &all_defaults()[build];
     let rotation = rotation_id(build, defaults, player);
     let level = player["level"].as_u64().unwrap_or(60);

@@ -129,9 +129,9 @@ fn with_gear(base: &Value, gear: &[Value], iterations: u64) -> Value {
     request
 }
 
-/// The player's DPS metrics; the engine counts the pets' damage in them.
-fn dps_metrics(result: &Value, iterations: u64) -> Value {
-    let mut metrics = result["raidMetrics"]["parties"][0]["players"][0]["dps"].clone();
+/// The player's DPS metrics (HPS for a healer); the engine counts the pets' in them.
+pub fn metrics(result: &Value, metric: &str, iterations: u64) -> Value {
+    let mut metrics = result["raidMetrics"]["parties"][0]["players"][0][metric].clone();
     metrics["aggregatorData"] = json!({ "n": iterations });
     metrics
 }
@@ -154,7 +154,8 @@ fn sim_all(base: &Value, sets: &[&Vec<Value>], iterations: u64) -> Vec<Option<Va
                 }
                 match engine::simulate(&with_gear(base, sets[i], iterations)) {
                     Ok(result) => {
-                        results.lock().unwrap()[i] = Some(dps_metrics(&result, iterations))
+                        results.lock().unwrap()[i] =
+                            Some(metrics(&result, defaults::metric_of(base), iterations))
                     }
                     Err(reason) => {
                         if refused.lock().unwrap().insert(reason.clone()) {
@@ -249,6 +250,50 @@ pub fn run(mut request: Value, max_combinations: usize) -> Result<Value, String>
     Ok(json!({
         "baseline": { "candidateIndex": -1, "gear": { "items": baseline_set }, "dpsMetrics": baseline },
         "topResults": top_results,
+        "metric": defaults::metric_of(&base),
         "error": null,
     }))
+}
+
+/// Talent builds side by side on one seed. Reads `{ baseRequest, variants: [{ name, talentsString }] }`;
+/// each variant gets its own build's defaults and rotation.
+pub fn compare(mut request: Value) -> Result<Value, String> {
+    let base = request["baseRequest"].take();
+    let variants = request["variants"].as_array().cloned().unwrap_or_default();
+    if !base.is_object() || variants.is_empty() {
+        return Err("compare needs a baseRequest and variants".into());
+    }
+    let seed = {
+        let mut seeded = base.clone();
+        defaults::apply(&mut seeded)?;
+        seeded["simOptions"]["randomSeed"].clone()
+    };
+    let done = AtomicUsize::new(0);
+    let results: Vec<Value> = thread::scope(|scope| {
+        let handles: Vec<_> = variants
+            .iter()
+            .map(|variant| {
+                let (base, seed, done, total) = (&base, &seed, &done, variants.len());
+                scope.spawn(move || {
+                    let mut request = base.clone();
+                    request["raid"]["parties"][0]["players"][0]["talentsString"] = variant["talentsString"].clone();
+                    request["simOptions"]["randomSeed"] = seed.clone();
+                    let iterations = request["simOptions"]["iterations"].as_u64().unwrap_or(defaults::DEFAULT_ITERATIONS);
+                    let outcome = defaults::apply(&mut request).and_then(|()| engine::simulate(&request));
+                    eprintln!("progress {} {total}", done.fetch_add(1, Ordering::Relaxed) + 1);
+                    let mut row = json!({ "name": variant["name"], "talentsString": variant["talentsString"] });
+                    match outcome {
+                        Ok(result) => row["metrics"] = metrics(&result, defaults::metric_of(&request), iterations),
+                        Err(reason) => row["error"] = json!(reason),
+                    }
+                    row
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("variant thread"))
+            .collect()
+    });
+    Ok(json!({ "metric": defaults::metric_of(&base), "results": results }))
 }
