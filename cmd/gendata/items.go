@@ -8,13 +8,14 @@ import (
 )
 
 type item struct {
-	ID      int    `json:"id"`
-	Name    string `json:"name"`
-	Icon    string `json:"icon"`
-	Type    int    `json:"type"`
-	Quality int    `json:"quality"`
-	Ilvl    int    `json:"ilvl"`
-	Suffix  bool   `json:"suffix,omitempty"`
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	Icon     string `json:"icon"`
+	Type     int    `json:"type"`
+	Quality  int    `json:"quality"`
+	Ilvl     int    `json:"ilvl"`
+	ReqLevel int    `json:"req_level,omitempty"`
+	Suffix   bool   `json:"suffix,omitempty"`
 }
 
 // proto.ItemType numbers, which SimHammer slots items by.
@@ -86,16 +87,18 @@ func engineItems(dir string) (map[int]*item, error) {
 	return items, err
 }
 
-func loadQualities(dir string) (map[int]int, error) {
+// Each item's quality and required level.
+func loadQualities(dir string) (map[int]int, map[int]int, error) {
 	rows, err := readCSV(filepath.Join(dir, "ItemSparse.csv"))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	out := make(map[int]int, len(rows))
+	quality, level := make(map[int]int, len(rows)), make(map[int]int, len(rows))
 	for _, r := range rows {
-		out[atoi(r["ID"])] = atoi(r["OverallQualityID"])
+		quality[atoi(r["ID"])] = atoi(r["OverallQualityID"])
+		level[atoi(r["ID"])] = atoi(r["RequiredLevel"])
 	}
-	return out, nil
+	return quality, level, nil
 }
 
 func engineSpellNames(path string) (map[int]string, error) {

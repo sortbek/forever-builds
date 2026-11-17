@@ -5,6 +5,7 @@ on:
     inputs:
       engine_ref: { description: "Engine commit (empty: upstream main)", required: false }
       uidata_ref: { description: "UI data commit (empty: upstream master)", required: false }
+      att_ref: { description: "AllTheThings commit (empty: newest that changed the Forever database)", required: false }
 permissions: { contents: write }
 concurrency: { group: release, cancel-in-progress: false }
 jobs:
@@ -20,16 +21,18 @@ jobs:
         with: { go-version: "1.25.4" }
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
-      - name: Pick the engine and UI data commits
+      - name: Pick the engine, UI data and item source commits
         run: |
-          ENGINE="${{ inputs.engine_ref }}"; UIDATA="${{ inputs.uidata_ref }}"
+          ENGINE="${{ inputs.engine_ref }}"; UIDATA="${{ inputs.uidata_ref }}"; ATT="${{ inputs.att_ref }}"
           [ -z "$ENGINE" ] && ENGINE=$(git ls-remote https://github.com/sage3648/mythicsim-forever-engine.git refs/heads/main | cut -f1)
           [ -z "$UIDATA" ] && UIDATA=$(git ls-remote https://github.com/wowsims/forever.git refs/heads/master | cut -f1)
-          echo "$ENGINE" > ENGINE_REF; echo "$UIDATA" > UIDATA_REF
+          [ -z "$ATT" ] && ATT=$(gh api "repos/ATTWoWAddon/AllTheThings/commits?path=.contrib/.db/forever&per_page=1" --jq '.[0].sha')
+          echo "$ENGINE" > ENGINE_REF; echo "$UIDATA" > UIDATA_REF; echo "$ATT" > ATT_REF
+        env: { GH_TOKEN: "${{ github.token }}" }
       - name: Skip when these commits are already released
         id: tag
         run: |
-          KEY="$(cut -c1-7 ENGINE_REF)$(cut -c1-7 UIDATA_REF)"
+          KEY="$(cut -c1-7 ENGINE_REF)$(cut -c1-7 UIDATA_REF)$(cut -c1-7 ATT_REF)"
           echo "tag=forever-$(date -u +%Y%m%d)-$KEY" >> "$GITHUB_OUTPUT"
           if gh release list --limit 50 | grep -q -- "-$KEY"; then echo "skip=1" >> "$GITHUB_OUTPUT"; fi
         env: { GH_TOKEN: "${{ github.token }}" }
@@ -48,6 +51,7 @@ jobs:
           path: |
             ENGINE_REF
             UIDATA_REF
+            ATT_REF
             wago/BUILD
             dist/data
   build:
@@ -83,10 +87,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { path: artifacts }
       - run: |
-          cp artifacts/gate/ENGINE_REF artifacts/gate/UIDATA_REF .
+          cp artifacts/gate/ENGINE_REF artifacts/gate/UIDATA_REF artifacts/gate/ATT_REF .
           gh release create "${{ needs.gate.outputs.tag }}" artifacts/simhammer-forever-*/* \
             --title "${{ needs.gate.outputs.tag }}" \
-            --notes "Engine sage3648/mythicsim-forever-engine@$(cat ENGINE_REF), UI data wowsims/forever@$(cat UIDATA_REF), client build $(cat artifacts/gate/wago/BUILD)"
+            --notes "Engine sage3648/mythicsim-forever-engine@$(cat ENGINE_REF), UI data wowsims/forever@$(cat UIDATA_REF), item sources ATTWoWAddon/AllTheThings@$(cat ATT_REF), client build $(cat artifacts/gate/wago/BUILD)"
           git config user.name "github-actions" && git config user.email "actions@github.com"
-          git add ENGINE_REF UIDATA_REF && git commit -m "chore: engine $(cut -c1-7 ENGINE_REF), ui data $(cut -c1-7 UIDATA_REF)" && git push || true
+          git add ENGINE_REF UIDATA_REF ATT_REF && git commit -m "chore: engine $(cut -c1-7 ENGINE_REF), ui data $(cut -c1-7 UIDATA_REF), item sources $(cut -c1-7 ATT_REF)" && git push || true
         env: { GH_TOKEN: "${{ github.token }}" }

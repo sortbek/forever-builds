@@ -20,8 +20,15 @@ The talent calculator trees and the item and spell icons in the data bundle come
 [wowsims/forever](https://github.com/wowsims/forever) (Copyright (c) 2022 wowsims team) at the
 commit in `UIDATA_REF`.
 
+## AllTheThings
+
+Where each item comes from (`sources.json`: instance bosses, quests, vendors, reputation, professions,
+PvP and world drops) is read from the WoW Forever database of
+[AllTheThings](https://github.com/ATTWoWAddon/AllTheThings) (Copyright (c) 2026 AllTheThings WoW Addon, MIT) at
+the commit in `ATT_REF`.
+
 ## Client data
 
 Trait ids, icon file ids and item quality are read from the game's own tables through
 [wago.tools](https://wago.tools). World of Warcraft is a trademark of Blizzard Entertainment;
-this project is not affiliated with Blizzard, MythicSim or the wowsims team.
+this project is not affiliated with Blizzard, MythicSim, the wowsims team or AllTheThings.

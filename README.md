@@ -16,6 +16,7 @@ simhammer-forever version
 | --- | --- |
 | Simulation, item and spell data, rotation presets | `engine/`: sage3648/mythicsim-forever-engine at `ENGINE_REF` |
 | Talent calculator trees, item and spell icons | `uidata/`: wowsims/forever at `UIDATA_REF` |
+| Where each item comes from (`sources.json`) | `att/`: ATTWoWAddon/AllTheThings' Forever database at `ATT_REF` |
 | Trait ids, icon file ids, item quality | wago.tools tables of the newest live build (`wowf`) |
 | Consumables, buffs, debuffs, spec options and target per build | `defaults/`, ours to edit |
 
@@ -27,12 +28,12 @@ most talent points (`src/defaults.rs`), and its `rotation` names one of the engi
 Needs Rust (the toolchain in `rust-toolchain.toml`), Go and Node.
 
 ```sh
-bash scripts/sync-engine.sh     # check out engine/ and uidata/
+bash scripts/sync-engine.sh     # check out engine/, uidata/ and att/
 bash scripts/fetch-wago.sh      # client tables into wago/
 cargo test                      # the gate: every build sims with its defaults
 cargo build --release
 go run ./cmd/gendata            # dist/data, the bundle SimHammer reads next to the binary
 ```
 
-CI does this daily against the newest engine and UI data commits and publishes a release for every platform
+CI does this daily against the newest engine, UI data and item source commits and publishes a release for every platform
 when the gate passes. When it fails nothing is released, and SimHammer keeps the last good engine.

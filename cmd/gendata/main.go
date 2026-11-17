@@ -49,6 +49,7 @@ func main() {
 	engine := flag.String("engine", "engine", "sim engine checkout")
 	uidata := flag.String("uidata", "uidata", "UI data checkout")
 	wago := flag.String("wago", "wago", "wago CSV dir")
+	att := flag.String("att", "att", "AllTheThings checkout (item sources)")
 	out := flag.String("out", "dist/data", "output dir")
 	commit := flag.String("commit", "unknown", "engine commit")
 	flag.Parse()
@@ -67,7 +68,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	qualities, err := loadQualities(*wago)
+	qualities, reqLevels, err := loadQualities(*wago)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -75,6 +76,10 @@ func main() {
 	items, err := engineItems(filepath.Join(*engine, "data"))
 	if err != nil {
 		log.Fatal(err)
+	}
+	gear := make(map[int]bool, len(items))
+	for id := range items {
+		gear[id] = true
 	}
 	for _, it := range db.Items {
 		row := items[it.ID]
@@ -93,6 +98,7 @@ func main() {
 		if row.Quality == 0 {
 			row.Quality = qualities[id]
 		}
+		row.ReqLevel = reqLevels[id]
 		list = append(list, row)
 	}
 	sort.Slice(list, func(a, b int) bool { return list[a].ID < list[b].ID })
@@ -153,7 +159,20 @@ func main() {
 		talents[class] = ct
 	}
 	write(*out, "talents.json", talents)
+	mapNames, err := loadNames(filepath.Join(*wago, "UiMap.csv"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	factionNames, err := loadNames(filepath.Join(*wago, "Faction.csv"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	sources, err := buildSources(*att, gear, mapNames, factionNames)
+	if err != nil {
+		log.Fatal(err)
+	}
+	write(*out, "sources.json", sources)
 	build, _ := os.ReadFile(filepath.Join(*wago, "BUILD"))
 	write(*out, "version.json", map[string]string{"engine_commit": *commit, "client_build": strings.TrimSpace(string(build))})
-	log.Printf("wrote %d items, %d enchants, %d spells, %d classes to %s", len(list), len(enchants), len(spells), len(talents), *out)
+	log.Printf("wrote %d items, %d enchants, %d spells, %d classes, %d item sources to %s", len(list), len(enchants), len(spells), len(talents), len(sources), *out)
 }
