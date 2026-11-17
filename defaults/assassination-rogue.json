@@ -1,0 +1,115 @@
+{
+	"debuffs": {
+		"curseOfRecklessness": true,
+		"faerieFire": true,
+		"sunderArmor": true
+	},
+	"encounter": {
+		"duration": 120,
+		"durationVariation": 15,
+		"executeProportion20": 0.2,
+		"executeProportion25": 0.25,
+		"executeProportion35": 0.35,
+		"executeProportion45": 0.45,
+		"executeProportion90": 0.9,
+		"targets": [
+			{
+				"canCrush": true,
+				"damageSpread": 0.3333,
+				"id": 213336,
+				"level": 63,
+				"minBaseDamage": 3000,
+				"name": "Level 60",
+				"parryHaste": true,
+				"stats": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					805,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					3731,
+					0,
+					127393,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"swingSpeed": 2
+			}
+		]
+	},
+	"partyBuffs": {
+		"battleShout": "TristateEffectRegular",
+		"leaderOfThePack": true,
+		"strengthOfEarthTotem": true,
+		"trueshotAura": true,
+		"windfuryTotem": true
+	},
+	"player": {
+		"buffs": {
+			"greaterBlessingOfKings": true,
+			"greaterBlessingOfMight": true
+		},
+		"consumables": {
+			"attackPowerBuffId": 12460,
+			"battleElixirId": 13452,
+			"conjuredId": 7676,
+			"conjuredItems": [
+				7676
+			],
+			"dragonbreathChili": true,
+			"flaskId": 13512,
+			"foodId": 13928,
+			"goblinSapper": true,
+			"mhImbueId": 26891,
+			"ohImbueId": 27186,
+			"spellPowerElixirId": 13454,
+			"strengthBuffId": 12451,
+			"zanzaId": 8412
+		},
+		"reactionTimeMs": 100,
+		"rogue": {
+			"options": {
+				"classOptions": {}
+			}
+		}
+	},
+	"raidBuffs": {
+		"fireResistanceAura": true,
+		"fireResistanceTotem": true,
+		"giftOfTheWild": true
+	},
+	"rotation": "rogue/dps/forever_mutilate",
+	"specKey": "rogue",
+	"tanks": []
+}

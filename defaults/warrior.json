@@ -1,0 +1,119 @@
+{
+	"debuffs": {
+		"curseOfRecklessness": true,
+		"exposeArmor": true,
+		"faerieFire": true,
+		"giftOfArthas": true,
+		"sunderArmor": true
+	},
+	"encounter": {
+		"duration": 120,
+		"durationVariation": 15,
+		"executeProportion20": 0.2,
+		"executeProportion25": 0.25,
+		"executeProportion35": 0.35,
+		"executeProportion45": 0.45,
+		"executeProportion90": 0.9,
+		"targets": [
+			{
+				"canCrush": true,
+				"damageSpread": 0.3333,
+				"id": 213336,
+				"level": 63,
+				"minBaseDamage": 3000,
+				"name": "Level 60",
+				"parryHaste": true,
+				"stats": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					805,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					3731,
+					0,
+					127393,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"swingSpeed": 2
+			}
+		]
+	},
+	"partyBuffs": {
+		"battleShout": "TristateEffectRegular",
+		"leaderOfThePack": true,
+		"strengthOfEarthTotem": true,
+		"windfuryTotem": true
+	},
+	"player": {
+		"buffs": {
+			"greaterBlessingOfKings": true,
+			"greaterBlessingOfMight": true
+		},
+		"consumables": {
+			"alcoholId": 21151,
+			"attackPowerBuffId": 12460,
+			"battleElixirId": 13452,
+			"defenseElixirId": 13445,
+			"dragonbreathChili": true,
+			"foodId": 20452,
+			"goblinSapper": true,
+			"guardianElixirId": 3825,
+			"mhImbueId": 18262,
+			"ohImbueId": 18262,
+			"potId": 13442,
+			"potions": [
+				13442
+			],
+			"strengthBuffId": 12451,
+			"zanzaId": 8410
+		},
+		"dpsWarrior": {
+			"options": {
+				"classOptions": {
+					"defaultStance": "WarriorStanceBerserker",
+					"queueDelay": 250,
+					"useBattleShout": true
+				}
+			}
+		},
+		"reactionTimeMs": 100
+	},
+	"raidBuffs": {
+		"giftOfTheWild": true
+	},
+	"rotation": "warrior/dps/dps_reck",
+	"specKey": "dpsWarrior",
+	"tanks": []
+}

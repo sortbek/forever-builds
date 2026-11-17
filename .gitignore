@@ -1,8 +1,6 @@
 /engine/
+/uidata/
 /dist/
 /wago/
-/assets/apl/
-/assets/trees/
-/assets/defaults/
-/node_modules/
+/target/
 *.exe

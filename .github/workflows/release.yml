@@ -3,58 +3,90 @@ on:
   schedule: [{ cron: "0 7 * * *" }]
   workflow_dispatch:
     inputs:
-      engine_ref: { description: "Engine commit (empty: upstream master)", required: false }
+      engine_ref: { description: "Engine commit (empty: upstream main)", required: false }
+      uidata_ref: { description: "UI data commit (empty: upstream master)", required: false }
 permissions: { contents: write }
 concurrency: { group: release, cancel-in-progress: false }
 jobs:
-  release:
+  # Picks the commits, runs the gate (every build sims with its defaults) and builds the data bundle.
+  gate:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      skip: ${{ steps.tag.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: "1.25.4" }
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
-      - uses: arduino/setup-protoc@v3
-        with: { version: "29.3", repo-token: "${{ secrets.GITHUB_TOKEN }}" }
-      - run: go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
-      - run: npm ci
-      - name: Pick engine commit
+      - name: Pick the engine and UI data commits
         run: |
-          REF="${{ inputs.engine_ref }}"
-          [ -z "$REF" ] && REF=$(git ls-remote https://github.com/wowsims/forever.git refs/heads/master | cut -f1)
-          echo "$REF" > ENGINE_REF
-      - run: bash scripts/sync-engine.sh
-      # A new engine commit can add or bump modules; the local replace needs them in go.sum.
-      - run: go mod tidy
-      - name: Rotation choice unchanged upstream
-        run: |
-          if ! git diff --exit-code rotation-lock.json; then
-            echo "::error::An autoRotation changed upstream. Re-port rotation.go, then commit rotation-lock.json."
-            exit 1
-          fi
-      - run: bash scripts/fetch-wago.sh
-      - run: go test -tags with_db ./...
-      - run: go run ./cmd/gendata -commit $(git -C engine rev-parse --short HEAD)
-      - name: Skip when this engine commit is already released
+          ENGINE="${{ inputs.engine_ref }}"; UIDATA="${{ inputs.uidata_ref }}"
+          [ -z "$ENGINE" ] && ENGINE=$(git ls-remote https://github.com/sage3648/mythicsim-forever-engine.git refs/heads/main | cut -f1)
+          [ -z "$UIDATA" ] && UIDATA=$(git ls-remote https://github.com/wowsims/forever.git refs/heads/master | cut -f1)
+          echo "$ENGINE" > ENGINE_REF; echo "$UIDATA" > UIDATA_REF
+      - name: Skip when these commits are already released
         id: tag
         run: |
-          SHA=$(git -C engine rev-parse --short HEAD)
-          echo "tag=forever-$(date -u +%Y%m%d)-$SHA" >> "$GITHUB_OUTPUT"
-          if gh release list --limit 50 | grep -q -- "-$SHA"; then echo "skip=1" >> "$GITHUB_OUTPUT"; fi
+          KEY="$(cut -c1-7 ENGINE_REF)-$(cut -c1-7 UIDATA_REF)"
+          echo "tag=forever-$(date -u +%Y%m%d)-$KEY" >> "$GITHUB_OUTPUT"
+          if gh release list --limit 50 | grep -q -- "-$KEY"; then echo "skip=1" >> "$GITHUB_OUTPUT"; fi
         env: { GH_TOKEN: "${{ github.token }}" }
       - if: steps.tag.outputs.skip != '1'
-        run: |
-          bash scripts/package.sh windows amd64 simhammer-forever-windows-x64.zip
-          bash scripts/package.sh linux amd64 simhammer-forever-linux-x64.tar.gz
-          bash scripts/package.sh linux arm64 simhammer-forever-linux-arm64.tar.gz
-          bash scripts/package.sh darwin arm64 simhammer-forever-macos-arm64.tar.gz
-          bash scripts/package.sh darwin amd64 simhammer-forever-macos-x64.tar.gz
+        run: bash scripts/sync-engine.sh && bash scripts/fetch-wago.sh
       - if: steps.tag.outputs.skip != '1'
-        run: |
-          gh release create "${{ steps.tag.outputs.tag }}" dist/*.zip dist/*.tar.gz \
-            --title "${{ steps.tag.outputs.tag }}" \
-            --notes "Engine wowsims/forever@$(cat ENGINE_REF), client build $(cat wago/BUILD)"
+        uses: Swatinem/rust-cache@v2
+      - if: steps.tag.outputs.skip != '1'
+        run: go test ./cmd/... && cargo test
+      - if: steps.tag.outputs.skip != '1'
+        run: go run ./cmd/gendata -commit "$(cut -c1-7 ENGINE_REF)"
+      - if: steps.tag.outputs.skip != '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate
+          path: |
+            ENGINE_REF
+            UIDATA_REF
+            wago/BUILD
+            dist/data
+  build:
+    needs: gate
+    if: needs.gate.outputs.skip != '1'
+    strategy:
+      matrix:
+        include:
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, asset: simhammer-forever-windows-x64.zip }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, asset: simhammer-forever-linux-x64.tar.gz }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, asset: simhammer-forever-linux-arm64.tar.gz }
+          - { os: macos-latest, target: aarch64-apple-darwin, asset: simhammer-forever-macos-arm64.tar.gz }
+          - { os: macos-13, target: x86_64-apple-darwin, asset: simhammer-forever-macos-x64.tar.gz }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: gate }
+      - run: bash scripts/sync-engine.sh
+        shell: bash
+      - run: rustup target add ${{ matrix.target }}
+      - run: cargo build --release --target ${{ matrix.target }}
+        env: { SIMHAMMER_FOREVER_VERSION: "${{ needs.gate.outputs.tag }}" }
+      - run: bash scripts/package.sh ${{ matrix.target }} ${{ matrix.asset }}
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with: { name: "${{ matrix.asset }}", path: "dist/${{ matrix.asset }}" }
+  publish:
+    needs: [gate, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts }
+      - run: |
+          cp artifacts/gate/ENGINE_REF artifacts/gate/UIDATA_REF .
+          gh release create "${{ needs.gate.outputs.tag }}" artifacts/simhammer-forever-*/* \
+            --title "${{ needs.gate.outputs.tag }}" \
+            --notes "Engine sage3648/mythicsim-forever-engine@$(cat ENGINE_REF), UI data wowsims/forever@$(cat UIDATA_REF), client build $(cat artifacts/gate/wago/BUILD)"
           git config user.name "github-actions" && git config user.email "actions@github.com"
-          git add ENGINE_REF go.mod go.sum && git commit -m "chore: engine $(cut -c1-7 ENGINE_REF)" && git push || true
+          git add ENGINE_REF UIDATA_REF && git commit -m "chore: engine $(cut -c1-7 ENGINE_REF), ui data $(cut -c1-7 UIDATA_REF)" && git push || true
         env: { GH_TOKEN: "${{ github.token }}" }

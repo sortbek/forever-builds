@@ -1,0 +1,116 @@
+{
+	"debuffs": {
+		"curseOfElements": true,
+		"judgementOfTheCrusader": true,
+		"judgementOfWisdom": true
+	},
+	"encounter": {
+		"duration": 120,
+		"durationVariation": 15,
+		"executeProportion20": 0.2,
+		"executeProportion25": 0.25,
+		"executeProportion35": 0.35,
+		"executeProportion45": 0.45,
+		"executeProportion90": 0.9,
+		"targets": [
+			{
+				"canCrush": true,
+				"damageSpread": 0.3333,
+				"id": 213336,
+				"level": 63,
+				"minBaseDamage": 3000,
+				"name": "Level 60",
+				"parryHaste": true,
+				"stats": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					805,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					3731,
+					0,
+					127393,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"swingSpeed": 2
+			}
+		]
+	},
+	"partyBuffs": {
+		"manaSpringTotem": "TristateEffectImproved",
+		"moonkinAura": true
+	},
+	"player": {
+		"buffs": {
+			"greaterBlessingOfKings": true,
+			"greaterBlessingOfWisdom": true
+		},
+		"channelClipDelayMs": 100,
+		"consumables": {
+			"conjuredId": 12662,
+			"conjuredItems": [
+				12662
+			],
+			"flaskId": 13512,
+			"foodId": 18254,
+			"guardianElixirId": 20007,
+			"mhImbueId": 20749,
+			"potId": 13444,
+			"potions": [
+				13444
+			],
+			"schoolElixirId": 9264,
+			"spellPowerElixirId": 13454,
+			"zanzaId": 8423
+		},
+		"distanceFromTarget": 20,
+		"dpsPriest": {
+			"options": {
+				"classOptions": {}
+			}
+		},
+		"reactionTimeMs": 100
+	},
+	"raidBuffs": {
+		"arcaneBrilliance": true,
+		"fireResistanceAura": true,
+		"fireResistanceTotem": true,
+		"giftOfTheWild": true,
+		"prayerOfSpirit": true
+	},
+	"rotation": "priest/dps/smite",
+	"specKey": "dpsPriest",
+	"tanks": []
+}

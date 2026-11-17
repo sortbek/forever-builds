@@ -1,0 +1,125 @@
+{
+	"debuffs": {
+		"curseOfRecklessness": true,
+		"exposeArmor": true,
+		"faerieFire": true,
+		"giftOfArthas": true,
+		"sunderArmor": true
+	},
+	"encounter": {
+		"duration": 120,
+		"durationVariation": 15,
+		"executeProportion20": 0.2,
+		"executeProportion25": 0.25,
+		"executeProportion35": 0.35,
+		"executeProportion45": 0.45,
+		"executeProportion90": 0.9,
+		"targets": [
+			{
+				"canCrush": true,
+				"damageSpread": 0.3333,
+				"id": 213336,
+				"level": 63,
+				"minBaseDamage": 3000,
+				"name": "Level 60",
+				"parryHaste": true,
+				"stats": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					805,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					3731,
+					0,
+					127393,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"swingSpeed": 2
+			}
+		]
+	},
+	"partyBuffs": {
+		"battleShout": "TristateEffectRegular",
+		"devotionAura": true,
+		"strengthOfEarthTotem": true,
+		"windfuryTotem": true
+	},
+	"player": {
+		"buffs": {
+			"greaterBlessingOfKings": true,
+			"greaterBlessingOfMight": true
+		},
+		"consumables": {
+			"alcoholId": 21151,
+			"attackPowerBuffId": 12460,
+			"battleElixirId": 13452,
+			"defenseElixirId": 13445,
+			"dragonbreathChili": true,
+			"flaskId": 13510,
+			"foodId": 20452,
+			"guardianElixirId": 3825,
+			"potId": 13455,
+			"potions": [
+				13455
+			],
+			"strengthBuffId": 12451,
+			"zanzaId": 8410
+		},
+		"feralBearDruid": {
+			"options": {
+				"classOptions": {
+					"innervateTarget": {}
+				},
+				"startingRage": 0
+			}
+		},
+		"inFrontOfTarget": true,
+		"reactionTimeMs": 100
+	},
+	"raidBuffs": {
+		"fireResistanceAura": true,
+		"fireResistanceTotem": true,
+		"giftOfTheWild": true,
+		"prayerOfFortitude": true
+	},
+	"rotation": "druid/feralbear/default",
+	"specKey": "feralBearDruid",
+	"tanks": [
+		{
+			"index": 0,
+			"type": "Player"
+		}
+	]
+}

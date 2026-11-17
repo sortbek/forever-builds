@@ -1,0 +1,23 @@
+[package]
+name = "simhammer-forever"
+version = "0.2.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+forever-engine = { path = "engine" }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[build-dependencies]
+serde_json = "1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+# The smoke tests sim every build; unoptimized that takes minutes.
+[profile.test]
+opt-level = 1
+[profile.test.package.forever-engine]
+opt-level = 2

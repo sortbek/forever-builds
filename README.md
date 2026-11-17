@@ -1,8 +1,38 @@
 # forever-builds
 
 `simhammer-forever` is the command-line runner SimHammer uses to sim WoW Forever characters. It wraps the
-[WoW Forever Simulator](https://github.com/wowsims/forever) engine (MIT, a fork of wowsims/classic) and applies the
-same defaults the engine's own site applies, so SimHammer only sends the character, gear, talents and fight settings.
+[MythicSim Forever engine](https://github.com/sage3648/mythicsim-forever-engine) (MIT, Rust) and fills in each
+build's defaults, so SimHammer only sends the character, gear, talents and fight settings.
 
-Build: `bash scripts/sync-engine.sh && go build -tags with_db .` (needs Go, protoc, protoc-gen-go and Node). CI builds
-and publishes a release for every platform daily, after the tests and a smoke sim of every spec pass.
+```
+simhammer-forever sim  --in request.json --out result.json     # RaidSimRequest in, RaidSimResult out
+simhammer-forever bulk --in request.json --out result.json     # gear sets ranked against the worn gear
+simhammer-forever version
+```
+
+## What comes from where
+
+| Part | Source |
+| --- | --- |
+| Simulation, item and spell data, rotation presets | `engine/`: sage3648/mythicsim-forever-engine at `ENGINE_REF` |
+| Talent calculator trees, item and spell icons | `uidata/`: wowsims/forever at `UIDATA_REF` |
+| Trait ids, icon file ids, item quality | wago.tools tables of the newest live build (`wowf`) |
+| Consumables, buffs, debuffs, spec options and target per build | `defaults/`, ours to edit |
+
+`defaults/<build>.json` started as MythicSim's reference requests. A build is picked by spec and the tree with the
+most talent points (`src/defaults.rs`), and its `rotation` names one of the engine's presets.
+
+## Build
+
+Needs Rust (the toolchain in `rust-toolchain.toml`), Go and Node.
+
+```sh
+bash scripts/sync-engine.sh     # check out engine/ and uidata/
+bash scripts/fetch-wago.sh      # client tables into wago/
+cargo test                      # the gate: every build sims with its defaults
+cargo build --release
+go run ./cmd/gendata            # dist/data, the bundle SimHammer reads next to the binary
+```
+
+CI does this daily against the newest engine and UI data commits and publishes a release for every platform
+when the gate passes. When it fails nothing is released, and SimHammer keeps the last good engine.

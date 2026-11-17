@@ -1,4 +1,4 @@
-// Builds dist/data from the engine checkout and the wago tables.
+// Builds dist/data from the engine data, the UI data checkout and the wago tables.
 package main
 
 import (
@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -45,7 +46,8 @@ func write(dir, name string, v any) {
 }
 
 func main() {
-	engine := flag.String("engine", "engine", "engine checkout")
+	engine := flag.String("engine", "engine", "sim engine checkout")
+	uidata := flag.String("uidata", "uidata", "UI data checkout")
 	wago := flag.String("wago", "wago", "wago CSV dir")
 	out := flag.String("out", "dist/data", "output dir")
 	commit := flag.String("commit", "unknown", "engine commit")
@@ -53,7 +55,7 @@ func main() {
 	if err := os.MkdirAll(*out, 0o755); err != nil {
 		log.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join(*engine, "assets/database/db.json"))
+	raw, err := os.ReadFile(filepath.Join(*uidata, "assets/database/db.json"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -61,28 +63,40 @@ func main() {
 	if err := json.Unmarshal(raw, &db); err != nil {
 		log.Fatal(err)
 	}
-	type item struct {
-		ID      int    `json:"id"`
-		Name    string `json:"name"`
-		Icon    string `json:"icon"`
-		Type    int    `json:"type"`
-		Quality int    `json:"quality"`
-		Ilvl    int    `json:"ilvl"`
-		Suffix  bool   `json:"suffix,omitempty"`
-	}
 	iconIDs, err := loadIconFileIDs(*wago)
 	if err != nil {
 		log.Fatal(err)
 	}
-	items := make([]item, 0, len(db.Items))
-	for _, it := range db.Items {
-		icon := it.Icon
-		if icon == "" && iconIDs[it.ID] > 0 {
-			icon = strconv.Itoa(iconIDs[it.ID]) // a FileDataID; the icon CDN serves those by number
-		}
-		items = append(items, item{it.ID, it.Name, icon, it.Type, it.Quality, it.ScalingOptions["0"].Ilvl, len(it.RandomSuffixOptions) > 0})
+	qualities, err := loadQualities(*wago)
+	if err != nil {
+		log.Fatal(err)
 	}
-	write(*out, "items.json", items)
+	// The items the engine sims, shown with the UI database's icon and quality where it has them.
+	items, err := engineItems(filepath.Join(*engine, "data"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, it := range db.Items {
+		row := items[it.ID]
+		if row == nil {
+			row = &item{ID: it.ID, Name: it.Name, Type: it.Type, Ilvl: it.ScalingOptions["0"].Ilvl}
+			items[it.ID] = row
+		}
+		row.Icon, row.Quality = it.Icon, it.Quality
+		row.Suffix = row.Suffix || len(it.RandomSuffixOptions) > 0
+	}
+	list := make([]*item, 0, len(items))
+	for id, row := range items {
+		if row.Icon == "" && iconIDs[id] > 0 {
+			row.Icon = strconv.Itoa(iconIDs[id]) // a FileDataID; the icon CDN serves those by number
+		}
+		if row.Quality == 0 {
+			row.Quality = qualities[id]
+		}
+		list = append(list, row)
+	}
+	sort.Slice(list, func(a, b int) bool { return list[a].ID < list[b].ID })
+	write(*out, "items.json", list)
 	enchants := make([]named, 0, len(db.Enchants))
 	for _, e := range db.Enchants {
 		enchants = append(enchants, named{e.EffectID, e.Name})
@@ -98,9 +112,19 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	used, err := engineSpellIDs(filepath.Join(*engine, "sim"))
+	used, err := engineSpellIDs(filepath.Join(*uidata, "sim"))
 	if err != nil {
 		log.Fatal(err)
+	}
+	engineNames, err := engineSpellNames(filepath.Join(*engine, "data/spells.jsonl"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	for id, name := range engineNames {
+		used[id] = true
+		if spellNames[id] == "" {
+			spellNames[id] = name
+		}
 	}
 	spells := spellList(icons, spellNames, used)
 	write(*out, "spells.json", spells)
@@ -110,7 +134,7 @@ func main() {
 	}
 	talents := map[string]*ClassTalents{}
 	for class := range classIDs {
-		ct, err := buildClassTalents(class, filepath.Join(*engine, "ui/sim/talents/trees", class+".json"), tables, spellIcons)
+		ct, err := buildClassTalents(class, filepath.Join(*uidata, "ui/sim/talents/trees", class+".json"), tables, spellIcons)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -119,5 +143,5 @@ func main() {
 	write(*out, "talents.json", talents)
 	build, _ := os.ReadFile(filepath.Join(*wago, "BUILD"))
 	write(*out, "version.json", map[string]string{"engine_commit": *commit, "client_build": strings.TrimSpace(string(build))})
-	log.Printf("wrote %d items, %d enchants, %d spells, %d classes to %s", len(items), len(enchants), len(spells), len(talents), *out)
+	log.Printf("wrote %d items, %d enchants, %d spells, %d classes to %s", len(list), len(enchants), len(spells), len(talents), *out)
 }
