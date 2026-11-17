@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
+	"unicode"
 )
 
 type item struct {
@@ -16,6 +18,12 @@ type item struct {
 	Ilvl     int    `json:"ilvl"`
 	ReqLevel int    `json:"req_level,omitempty"`
 	Suffix   bool   `json:"suffix,omitempty"`
+	// Who can wear it: cloth/leather/mail/plate, the weapon kind, the hand it is held in, and the
+	// classes it is limited to.
+	Armor   string   `json:"armor,omitempty"`
+	Weapon  string   `json:"weapon,omitempty"`
+	Hand    string   `json:"hand,omitempty"`
+	Classes []string `json:"classes,omitempty"`
 }
 
 // proto.ItemType numbers, which SimHammer slots items by.
@@ -26,9 +34,14 @@ var itemTypes = map[string]int{
 }
 
 type engineItem struct {
-	ID             int    `json:"id"`
-	Name           string `json:"name"`
-	Type           string `json:"type"`
+	ID             int      `json:"id"`
+	Name           string   `json:"name"`
+	Type           string   `json:"type"`
+	ArmorType      string   `json:"armor_type"`
+	WeaponType     string   `json:"weapon_type"`
+	RangedType     string   `json:"ranged_weapon_type"`
+	HandType       string   `json:"hand_type"`
+	ClassAllowlist []string `json:"class_allowlist"`
 	ScalingOptions map[string]struct {
 		Ilvl int `json:"ilvl"`
 	} `json:"scaling_options"`
@@ -65,7 +78,14 @@ func engineItems(dir string) (map[int]*item, error) {
 			if itemTypes[it.Type] == 0 {
 				return nil
 			}
-			items[it.ID] = &item{ID: it.ID, Name: it.Name, Type: itemTypes[it.Type], Ilvl: it.ScalingOptions["0"].Ilvl}
+			row := &item{ID: it.ID, Name: it.Name, Type: itemTypes[it.Type], Ilvl: it.ScalingOptions["0"].Ilvl}
+			row.Armor = enumName(it.ArmorType, "ArmorType")
+			row.Weapon = enumName(it.WeaponType, "WeaponType") + enumName(it.RangedType, "RangedWeaponType")
+			row.Hand = enumName(it.HandType, "HandType")
+			for _, c := range it.ClassAllowlist {
+				row.Classes = append(row.Classes, enumName(c, "Class"))
+			}
+			items[it.ID] = row
 			return nil
 		})
 		if err != nil {
@@ -88,6 +108,25 @@ func engineItems(dir string) (map[int]*item, error) {
 }
 
 // Each item's quality and required level.
+// ArmorTypeLeather → leather, HandTypeTwoHand → two_hand; empty for an unset or unknown value.
+func enumName(value, prefix string) string {
+	name, ok := strings.CutPrefix(value, prefix)
+	if !ok || name == "" || name == "Unknown" {
+		return ""
+	}
+	var out []rune
+	for i, r := range name {
+		if unicode.IsUpper(r) {
+			if i > 0 {
+				out = append(out, '_')
+			}
+			r = unicode.ToLower(r)
+		}
+		out = append(out, r)
+	}
+	return string(out)
+}
+
 func loadQualities(dir string) (map[int]int, map[int]int, error) {
 	rows, err := readCSV(filepath.Join(dir, "ItemSparse.csv"))
 	if err != nil {

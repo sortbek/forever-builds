@@ -19,6 +19,7 @@ type dbJSON struct {
 		Icon           string `json:"icon"`
 		Type           int    `json:"type"`
 		Quality        int    `json:"quality"`
+		ReqLvl         int    `json:"reqLvl"`
 		ScalingOptions map[string]struct {
 			Ilvl int `json:"ilvl"`
 		} `json:"scalingOptions"`
@@ -64,6 +65,19 @@ func main() {
 	if err := json.Unmarshal(raw, &db); err != nil {
 		log.Fatal(err)
 	}
+	raw, err = os.ReadFile(filepath.Join(*uidata, "assets/database/leftover_db.json"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	var leftovers dbJSON
+	if err := json.Unmarshal(raw, &leftovers); err != nil {
+		log.Fatal(err)
+	}
+	// The required level for the items wago's ItemSparse lacks, which is about half of them.
+	uiReqLevels := map[int]int{}
+	for _, it := range append(leftovers.Items, db.Items...) {
+		uiReqLevels[it.ID] = it.ReqLvl
+	}
 	iconIDs, err := loadIconFileIDs(*wago)
 	if err != nil {
 		log.Fatal(err)
@@ -98,7 +112,11 @@ func main() {
 		if row.Quality == 0 {
 			row.Quality = qualities[id]
 		}
-		row.ReqLevel = reqLevels[id]
+		if level, ok := reqLevels[id]; ok {
+			row.ReqLevel = level
+		} else {
+			row.ReqLevel = uiReqLevels[id]
+		}
 		list = append(list, row)
 	}
 	sort.Slice(list, func(a, b int) bool { return list[a].ID < list[b].ID })

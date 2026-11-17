@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -26,5 +27,22 @@ func TestIconFileIDsFromItemThenAppearance(t *testing.T) {
 	// Item 1: its own icon. Item 2: the base appearance (modifier 0), not the variant. Item 3: none.
 	if want := map[int]int{1: 111, 2: 222}; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v want %v", got, want)
+	}
+}
+
+func TestEnumNames(t *testing.T) {
+	for in, want := range map[string]string{
+		"ArmorTypeLeather": "leather", "HandTypeTwoHand": "two_hand", "ClassPriest": "priest",
+		"ArmorTypeUnknown": "", "": "", "WeaponTypeOffHand": "off_hand",
+	} {
+		prefix := in
+		for _, p := range []string{"ArmorType", "HandType", "WeaponType", "Class"} {
+			if strings.HasPrefix(in, p) {
+				prefix = p
+			}
+		}
+		if got := enumName(in, prefix); got != want {
+			t.Errorf("enumName(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
