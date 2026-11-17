@@ -56,7 +56,9 @@ fn run(args: &[String]) -> Result<(), String> {
     let result = match command {
         "sim" => {
             defaults::apply(&mut request)?;
-            engine::simulate(&request)?
+            let mut result = engine::simulate(&request)?;
+            result["simhammer"] = defaults::applied(&request);
+            result
         }
         "bulk" => bulk::run(request, max_combinations)?,
         "options" => defaults::options(&request),

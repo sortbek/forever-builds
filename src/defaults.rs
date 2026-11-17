@@ -291,6 +291,29 @@ fn apply_choices(request: &mut Value, defaults: &Value) {
     }
 }
 
+/// What a request ran with once its defaults were filled in, for the result page: the rotation
+/// with the preset it came from, the target and the buff and debuff sets.
+pub fn applied(request: &Value) -> Value {
+    let party = &request["raid"]["parties"][0];
+    let player = &party["players"][0];
+    let rotation = &player["rotation"];
+    let preset = rotations()
+        .as_object()
+        .and_then(|all| all.iter().find(|(_, apl)| *apl == rotation))
+        .map(|(id, _)| id.as_str());
+    let target = &request["encounter"]["targets"][0];
+    json!({
+        "rotationId": preset,
+        "rotation": rotation,
+        "target": { "level": target["level"], "armor": target["stats"][ARMOR] },
+        "raidBuffs": request["raid"]["buffs"],
+        "partyBuffs": party["buffs"],
+        "playerBuffs": player["buffs"],
+        "debuffs": request["raid"]["debuffs"],
+        "consumables": player["consumables"],
+    })
+}
+
 pub fn apply(request: &mut Value) -> Result<(), String> {
     let player = &request["raid"]["parties"][0]["players"][0];
     if !player.is_object() {

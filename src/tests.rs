@@ -347,6 +347,17 @@ fn compare_sims_talent_builds_with_their_own_rotation() {
 }
 
 #[test]
+fn applied_names_the_preset_target_and_sets() {
+    let mut req = levelling_hunter();
+    defaults::apply(&mut req).unwrap();
+    let applied = defaults::applied(&req);
+    assert_eq!(applied["rotationId"], "hunter/dps/bm");
+    assert!(applied["rotation"]["priorityList"].is_array());
+    assert_eq!(applied["target"], json!({ "level": 31, "armor": 1836.0 }));
+    assert_eq!(applied["debuffs"], json!({ "huntersMark": true }));
+}
+
+#[test]
 fn a_request_without_a_seed_sims() {
     let mut req = request("frost-mage", &talents("mage", 2), 200);
     req["simOptions"]
