@@ -165,6 +165,65 @@ fn what_the_request_sets_is_kept() {
     assert!(player["consumables"].is_object() && player["mage"]["options"].is_object());
 }
 
+/// A level 29 hunter as SimHammer sends it: the sheet from the export, one pet option, no buffs.
+fn levelling_hunter() -> Value {
+    let mut req = request("hunter", "5120221402100000", 300);
+    let player = &mut req["raid"]["parties"][0]["players"][0];
+    let items = json!([
+        {"id": 3732}, {"id": 5254}, {"id": 5314}, {"id": 270043, "enchant": 15}, {"id": 4794},
+        {"id": 5299, "enchant": 15}, {"id": 4246}, {"id": 4831}, {"id": 3741, "enchant": 15},
+        {"id": 6414}, {"id": 17694}, {"id": 3210, "randomSuffix": 12726}, {"id": 273843},
+    ]);
+    player["race"] = json!("RaceOrc");
+    player["equipment"] = json!({ "items": items });
+    player["level"] = json!(29);
+    player["characterSheet"] = json!({
+        "level": 29, "base": [36, 58, 50, 33, 43], "attributes": [54, 93, 83, 33, 61],
+        "attributeBuffs": [18, 35, 33, 0, 18], "health": 1028, "mana": 960,
+        "meleeCrit": 3.81, "rangedCrit": 4.01, "spellCrit": [4.65, 4.65, 4.65, 4.65, 4.65, 4.65],
+        "dodge": 7.45, "parry": 4.36, "attackPower": [185, 6, 0], "rangedAttackPower": [224, 41, 0],
+        "armor": [44, 712], "manaRegen": [13.88, 0.0], "auras": [14318, 19883],
+        "equipment": { "items": items },
+    });
+    player["hunter"] = json!({ "options": { "classOptions": { "petType": "Raptor" } } });
+    req
+}
+
+#[test]
+fn a_levelling_character_sims_solo_against_a_target_near_its_level() {
+    let mut req = levelling_hunter();
+    defaults::apply(&mut req).unwrap();
+    let target = &req["encounter"]["targets"][0];
+    assert_eq!(
+        (&target["level"], &target["name"]),
+        (&json!(31), &json!("Level 31"))
+    );
+    assert_eq!(target["stats"][30], 1836.0);
+    let player = &req["raid"]["parties"][0]["players"][0];
+    assert_eq!(req["raid"]["buffs"], json!({}));
+    assert_eq!(req["raid"]["debuffs"], json!({}));
+    assert_eq!(player["consumables"], json!({}));
+    let options = &player["hunter"]["options"]["classOptions"];
+    assert_eq!(options["petType"], "Raptor");
+    assert!(
+        options["ammo"].is_string(),
+        "the build's other options stay"
+    );
+    let result = engine::simulate(&req).unwrap();
+    let unit = &result["raidMetrics"]["parties"][0]["players"][0];
+    assert!(unit["dps"]["avg"].as_f64().unwrap() > 0.0);
+    assert!(unit["pets"][0]["dps"]["avg"].as_f64().unwrap() > 0.0);
+}
+
+#[test]
+fn an_empty_buff_set_stays_empty_at_60() {
+    let mut req = request("frost-mage", "", 300);
+    req["raid"]["buffs"] = json!({});
+    defaults::apply(&mut req).unwrap();
+    assert_eq!(req["raid"]["buffs"], json!({}));
+    assert!(!req["raid"]["debuffs"].as_object().unwrap().is_empty());
+}
+
 #[test]
 fn a_request_without_a_seed_sims() {
     let mut req = request("frost-mage", &talents("mage", 2), 200);

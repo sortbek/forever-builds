@@ -9,6 +9,8 @@ use std::{
 use serde_json::{json, Map, Value};
 
 pub const DEFAULT_ITERATIONS: u64 = 12_500;
+/// stats.Armor in a target's stats array.
+const ARMOR: usize = 30;
 
 fn embedded(cell: &'static OnceLock<Value>, text: &'static str) -> &'static Value {
     cell.get_or_init(|| serde_json::from_str(text).expect("embedded json"))
@@ -104,8 +106,32 @@ fn fill(into: &mut Value, from: &Value) {
     }
 }
 
-fn is_empty(value: Option<&Value>) -> bool {
-    value.and_then(Value::as_object).is_none_or(Map::is_empty)
+/// [`fill`] through nested objects, so a request can set one option and keep the others.
+fn fill_deep(into: &mut Value, from: &Value) {
+    let into = object(into);
+    for (key, value) in from.as_object().into_iter().flatten() {
+        match into.get_mut(key) {
+            Some(sent) if sent.is_object() && value.is_object() => fill_deep(sent, value),
+            Some(_) => {}
+            None => {
+                into.insert(key.clone(), value.clone());
+            }
+        }
+    }
+}
+
+/// The build's target two levels above a levelling character, its armor scaled to its level.
+fn levelling_target(encounter: &Value, level: u64) -> Value {
+    let mut target = encounter["targets"][0].clone();
+    let target_level = level + 2;
+    let full = (
+        target["level"].as_u64().unwrap_or(63),
+        target["stats"][ARMOR].as_f64().unwrap_or(0.0),
+    );
+    target["level"] = json!(target_level);
+    target["name"] = json!(format!("Level {target_level}"));
+    target["stats"][ARMOR] = json!((full.1 * target_level as f64 / full.0 as f64).round());
+    target
 }
 
 fn main_hand_is_dagger(player: &Value) -> bool {
@@ -137,6 +163,8 @@ pub fn apply(request: &mut Value) -> Result<(), String> {
     let build = build_for(spec_key, talents).ok_or("healer specs can't be simmed yet")?;
     let defaults = &all_defaults()[build];
     let rotation = rotation_id(build, defaults, player);
+    let level = player["level"].as_u64().unwrap_or(60);
+    let levelling = (10..60).contains(&level);
 
     let sim_options = object(&mut request["simOptions"]);
     if sim_options
@@ -154,12 +182,23 @@ pub fn apply(request: &mut Value) -> Result<(), String> {
             .map_or(1, |d| d.subsec_nanos().max(1));
         sim_options.insert("randomSeed".into(), json!(seed.to_string()));
     }
+    if levelling && request["encounter"].get("targets").is_none() {
+        request["encounter"]["targets"] = json!([levelling_target(&defaults["encounter"], level)]);
+    }
     fill(&mut request["encounter"], &defaults["encounter"]);
 
+    // What the request sets is kept, an empty set too. A levelling character starts solo.
+    let default_of = |key: &str| {
+        if levelling {
+            json!({})
+        } else {
+            defaults[key].clone()
+        }
+    };
     let raid = &mut request["raid"];
     for (key, from) in [("buffs", "raidBuffs"), ("debuffs", "debuffs")] {
-        if is_empty(raid.get(key)) {
-            raid[key] = defaults[from].clone();
+        if raid.get(key).is_none() {
+            raid[key] = default_of(from);
         }
     }
     if raid.get("tanks").is_none() && defaults["tanks"].as_array().is_some_and(|t| !t.is_empty()) {
@@ -167,18 +206,16 @@ pub fn apply(request: &mut Value) -> Result<(), String> {
     }
     let party = &mut raid["parties"][0];
     if party.get("buffs").is_none() {
-        party["buffs"] = defaults["partyBuffs"].clone();
+        party["buffs"] = default_of("partyBuffs");
     }
 
     let player = &mut party["players"][0];
-    let sent_options = !is_empty(player[spec_key].get("options"));
     for (key, value) in defaults["player"].as_object().into_iter().flatten() {
         if key == spec_key {
-            if !sent_options {
-                player[spec_key] = value.clone();
-            }
+            fill_deep(&mut player[spec_key], value);
         } else if player.get(key).is_none() {
-            player[key.as_str()] = value.clone();
+            let solo = levelling && (key == "buffs" || key == "consumables");
+            player[key.as_str()] = if solo { json!({}) } else { value.clone() };
         }
     }
     if player.get("rotation").is_none() {
