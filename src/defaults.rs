@@ -150,6 +150,119 @@ fn rotation_id(build: &str, defaults: &Value, player: &Value) -> String {
         .to_string()
 }
 
+/// [{ id: "<group>.<key>", label, on: the value that switches it on }].
+pub fn toggles() -> &'static Value {
+    static CELL: OnceLock<Value> = OnceLock::new();
+    embedded(
+        &CELL,
+        include_str!(concat!(env!("OUT_DIR"), "/toggles.json")),
+    )
+}
+
+/// Where a toggle group's set sits in the build's defaults.
+fn default_set<'a>(defaults: &'a Value, group: &str) -> &'a Value {
+    match group {
+        "raid" => &defaults["raidBuffs"],
+        "party" => &defaults["partyBuffs"],
+        "player" => &defaults["player"]["buffs"],
+        _ => &defaults["debuffs"],
+    }
+}
+
+fn is_on(value: &Value) -> bool {
+    !(value.is_null()
+        || *value == json!(false)
+        || *value == json!(0)
+        || *value == json!("TristateEffectMissing"))
+}
+
+fn levelling_at(level: u64) -> bool {
+    (10..60).contains(&level)
+}
+
+/// What the settings block offers per spec: each buff and debuff with its starting state.
+/// Reads `{ specKeys, talentsString, level }`.
+pub fn options(input: &Value) -> Value {
+    let talents = input["talentsString"].as_str().unwrap_or("");
+    let levelling = levelling_at(input["level"].as_u64().unwrap_or(60));
+    let mut out = Map::new();
+    for spec_key in input["specKeys"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
+        let Some(build) = build_for(spec_key, talents) else {
+            continue;
+        };
+        let defaults = &all_defaults()[build];
+        let list: Vec<Value> = toggles()
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|toggle| {
+                let (group, key) = toggle["id"]
+                    .as_str()
+                    .unwrap_or(".")
+                    .split_once('.')
+                    .unwrap_or(("", ""));
+                json!({
+                    "id": toggle["id"],
+                    "group": if group == "debuff" { "debuff" } else { "buff" },
+                    "label": toggle["label"],
+                    "on": !levelling && is_on(&default_set(defaults, group)[key]),
+                })
+            })
+            .collect();
+        out.insert(
+            spec_key.to_string(),
+            json!({ "build": build, "toggles": list, "consumables": !levelling }),
+        );
+    }
+    Value::Object(out)
+}
+
+/// Turns the request's own `simhammer` choices into the sets the engine reads, and removes them.
+fn apply_choices(request: &mut Value, defaults: &Value) {
+    let Some(choices) = request.as_object_mut().and_then(|r| r.remove("simhammer")) else {
+        return;
+    };
+    if let Some(on) = choices["buffs"].as_array() {
+        let mut sets: [Map<String, Value>; 4] = Default::default();
+        for toggle in toggles().as_array().into_iter().flatten() {
+            if !on.contains(&toggle["id"]) {
+                continue;
+            }
+            let (group, key) = toggle["id"]
+                .as_str()
+                .unwrap_or(".")
+                .split_once('.')
+                .unwrap_or(("", ""));
+            // The build's own strength of the buff (an improved Battle Shout) where it has one.
+            let preset = &default_set(defaults, group)[key];
+            let value = if is_on(preset) { preset } else { &toggle["on"] };
+            let set = ["raid", "party", "player", "debuff"]
+                .iter()
+                .position(|g| *g == group)
+                .unwrap_or(3);
+            sets[set].insert(key.to_string(), value.clone());
+        }
+        let [raid, party, player, debuffs] = sets;
+        request["raid"]["buffs"] = Value::Object(raid);
+        request["raid"]["debuffs"] = Value::Object(debuffs);
+        request["raid"]["parties"][0]["buffs"] = Value::Object(party);
+        request["raid"]["parties"][0]["players"][0]["buffs"] = Value::Object(player);
+    }
+    match choices["consumables"].as_bool() {
+        Some(false) => request["raid"]["parties"][0]["players"][0]["consumables"] = json!({}),
+        Some(true) => {
+            request["raid"]["parties"][0]["players"][0]["consumables"] =
+                defaults["player"]["consumables"].clone()
+        }
+        None => {}
+    }
+}
+
 pub fn apply(request: &mut Value) -> Result<(), String> {
     let player = &request["raid"]["parties"][0]["players"][0];
     if !player.is_object() {
@@ -164,7 +277,8 @@ pub fn apply(request: &mut Value) -> Result<(), String> {
     let defaults = &all_defaults()[build];
     let rotation = rotation_id(build, defaults, player);
     let level = player["level"].as_u64().unwrap_or(60);
-    let levelling = (10..60).contains(&level);
+    let levelling = levelling_at(level);
+    apply_choices(request, defaults);
 
     let sim_options = object(&mut request["simOptions"]);
     if sim_options

@@ -225,6 +225,83 @@ fn an_empty_buff_set_stays_empty_at_60() {
 }
 
 #[test]
+fn options_list_each_spec_with_its_builds_starting_state() {
+    let out = defaults::options(
+        &json!({ "specKeys": ["mage", "holyPaladin"], "talentsString": talents("mage", 2), "level": 60 }),
+    );
+    assert!(out.get("holyPaladin").is_none());
+    let mage = &out["mage"];
+    assert_eq!(mage["build"], "frost-mage");
+    assert_eq!(mage["consumables"], true);
+    let toggles = mage["toggles"].as_array().unwrap();
+    let find = |id: &str| {
+        toggles
+            .iter()
+            .find(|t| t["id"] == id)
+            .unwrap_or_else(|| panic!("{id}"))
+    };
+    assert_eq!(find("raid.arcaneBrilliance")["on"], true);
+    assert_eq!(find("raid.arcaneBrilliance")["label"], "Arcane Brilliance");
+    assert_eq!(find("raid.giftOfTheWild")["label"], "Gift of the Wild");
+    assert_eq!(find("debuff.sunderArmor")["on"], false);
+    assert_eq!(find("debuff.curseOfElements")["group"], "debuff");
+    assert!(toggles
+        .iter()
+        .all(|t| !t["id"].as_str().unwrap().contains("Resistance")));
+
+    let levelling =
+        defaults::options(&json!({ "specKeys": ["mage"], "talentsString": "", "level": 29 }));
+    assert_eq!(levelling["mage"]["consumables"], false);
+    assert!(levelling["mage"]["toggles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|t| t["on"] == false));
+}
+
+#[test]
+fn chosen_buffs_replace_the_builds_sets() {
+    let mut req = request("warrior", &talents("warrior", 1), 300);
+    req["simhammer"] = json!({ "buffs": ["party.battleShout", "raid.thorns", "debuff.faerieFire"], "consumables": false });
+    defaults::apply(&mut req).unwrap();
+    assert!(req.get("simhammer").is_none());
+    let party = &req["raid"]["parties"][0];
+    assert_eq!(req["raid"]["buffs"], json!({ "thorns": true }));
+    assert_eq!(req["raid"]["debuffs"], json!({ "faerieFire": true }));
+    assert_eq!(
+        party["buffs"],
+        json!({ "battleShout": defaults::all_defaults()["warrior"]["partyBuffs"]["battleShout"] })
+    );
+    assert_eq!(party["players"][0]["buffs"], json!({}));
+    assert_eq!(party["players"][0]["consumables"], json!({}));
+    engine::simulate(&req).unwrap();
+}
+
+#[test]
+fn every_builds_starting_toggles_sim_like_its_defaults() {
+    for (build, tree) in BUILDS {
+        let spec_key = defaults::all_defaults()[build]["specKey"].as_str().unwrap();
+        let talents = talents(class_of(spec_key), tree);
+        let options = defaults::options(
+            &json!({ "specKeys": [spec_key], "talentsString": talents, "level": 60 }),
+        );
+        let on: Vec<&Value> = options[spec_key]["toggles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|t| t["on"] == true)
+            .map(|t| &t["id"])
+            .collect();
+        let mut chosen = request(build, &talents, 200);
+        chosen["simhammer"] = json!({ "buffs": on });
+        defaults::apply(&mut chosen).unwrap();
+        if let Err(e) = engine::simulate(&chosen) {
+            panic!("{build}: {e}");
+        }
+    }
+}
+
+#[test]
 fn a_request_without_a_seed_sims() {
     let mut req = request("frost-mage", &talents("mage", 2), 200);
     req["simOptions"]

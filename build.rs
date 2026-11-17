@@ -10,12 +10,42 @@ fn read_json(path: &Path) -> Value {
     serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
+/// Resistance buffs, the Atiesh auras and the totem bookkeeping no sim setting needs.
+const HIDDEN_TOGGLES: [&str; 5] = [
+    "Resistance",
+    "atiesh",
+    "totemTwisting",
+    "manaTideTotems",
+    "ShadowProtection",
+];
+
+/// `giftOfTheWild` to "Gift of the Wild".
+fn label(key: &str) -> String {
+    let mut words: Vec<String> = Vec::new();
+    for c in key.chars() {
+        if c.is_uppercase() || words.is_empty() {
+            words.push(String::new());
+        }
+        words.last_mut().unwrap().push(c);
+    }
+    words
+        .iter()
+        .enumerate()
+        .map(|(i, word)| match word.as_str() {
+            "Of" | "The" if i > 0 => word.to_lowercase(),
+            _ => word[..1].to_uppercase() + &word[1..],
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn main() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let out = env::var("OUT_DIR").unwrap();
     for watched in [
         "engine/data/items.jsonl",
         "engine/presets",
+        "engine/data/proto-schema.json",
         "defaults",
         "ENGINE_REF",
         "wago/BUILD",
@@ -90,6 +120,38 @@ fn main() {
     fs::write(
         format!("{out}/rotations.json"),
         serde_json::to_string(&rotations).unwrap(),
+    )
+    .unwrap();
+
+    // The buffs and debuffs a user can switch, from the engine's request schema.
+    let schema = read_json(&root.join("engine/data/proto-schema.json"));
+    let mut toggles = Vec::new();
+    for (group, message) in [
+        ("raid", "proto.RaidBuffs"),
+        ("party", "proto.PartyBuffs"),
+        ("player", "proto.IndividualBuffs"),
+        ("debuff", "proto.Debuffs"),
+    ] {
+        for field in schema["messages"][message]["fields"]
+            .as_array()
+            .expect("schema fields")
+        {
+            let key = field["json_name"].as_str().expect("field name");
+            let on = match (field["kind"].as_str().unwrap_or(""), field["type"].as_str()) {
+                ("bool", _) => json!(true),
+                ("int32", _) => json!(1),
+                ("enum", Some("proto.TristateEffect")) => json!("TristateEffectRegular"),
+                _ => continue,
+            };
+            if HIDDEN_TOGGLES.iter().any(|hidden| key.contains(hidden)) {
+                continue;
+            }
+            toggles.push(json!({ "id": format!("{group}.{key}"), "label": label(key), "on": on }));
+        }
+    }
+    fs::write(
+        format!("{out}/toggles.json"),
+        serde_json::to_string(&toggles).unwrap(),
     )
     .unwrap();
 
