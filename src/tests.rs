@@ -207,7 +207,11 @@ fn a_levelling_character_sims_solo_against_a_target_near_its_level() {
     assert_eq!(target["stats"][30], 1836.0);
     let player = &req["raid"]["parties"][0]["players"][0];
     assert_eq!(req["raid"]["buffs"], json!({}));
-    assert_eq!(req["raid"]["debuffs"], json!({}));
+    assert_eq!(
+        req["raid"]["debuffs"],
+        json!({ "huntersMark": true }),
+        "its own mark"
+    );
     assert_eq!(player["consumables"], json!({}));
     let options = &player["hunter"]["options"]["classOptions"];
     assert_eq!(options["petType"], "Raptor");
@@ -264,6 +268,16 @@ fn options_list_each_spec_with_its_builds_starting_state() {
         .unwrap()
         .iter()
         .all(|t| t["on"] == false));
+    let hunter =
+        defaults::options(&json!({ "specKeys": ["hunter"], "talentsString": "", "level": 29 }));
+    let on: Vec<&Value> = hunter["hunter"]["toggles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|t| t["on"] == true)
+        .map(|t| &t["id"])
+        .collect();
+    assert_eq!(on, vec![&json!("debuff.huntersMark")]);
 }
 
 #[test]

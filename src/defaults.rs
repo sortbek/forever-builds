@@ -195,6 +195,11 @@ fn is_on(value: &Value) -> bool {
         || *value == json!("TristateEffectMissing"))
 }
 
+/// The debuff a character keeps on its own target while levelling solo.
+fn solo_debuff(spec_key: &str) -> Option<&'static str> {
+    (spec_key == "hunter").then_some("huntersMark")
+}
+
 fn levelling_at(level: u64) -> bool {
     (10..60).contains(&level)
 }
@@ -229,7 +234,11 @@ pub fn options(input: &Value) -> Value {
                     "id": toggle["id"],
                     "group": if group == "debuff" { "debuff" } else { "buff" },
                     "label": toggle["label"],
-                    "on": !levelling && is_on(&default_set(defaults, group)[key]),
+                    "on": if levelling {
+                        group == "debuff" && solo_debuff(spec_key) == Some(key)
+                    } else {
+                        is_on(&default_set(defaults, group)[key])
+                    },
                 })
             })
             .collect();
@@ -323,7 +332,9 @@ pub fn apply(request: &mut Value) -> Result<(), String> {
 
     // What the request sets is kept, an empty set too. A levelling character starts solo.
     let default_of = |key: &str| {
-        if levelling {
+        if levelling && key == "debuffs" && solo_debuff(spec_key).is_some() {
+            json!({ solo_debuff(spec_key).unwrap_or_default(): true })
+        } else if levelling {
             json!({})
         } else {
             defaults[key].clone()
