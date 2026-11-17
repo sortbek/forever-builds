@@ -25,10 +25,10 @@ func TestEngineSpellIDsFindsActionSpells(t *testing.T) {
 }
 
 func TestSpellListAddsClientNamesForEngineSpells(t *testing.T) {
-	icons := []named{{1, "Icon Name"}}
+	icons := []named{{ID: 1, Name: "Icon Name"}}
 	names := map[int]string{1: "Client Name", 3009: "Claw", 5: "Unused"}
 	got := spellList(icons, names, map[int]bool{1: true, 3009: true})
-	want := []named{{1, "Icon Name"}, {3009, "Claw"}}
+	want := []named{{ID: 1, Name: "Icon Name"}, {ID: 3009, Name: "Claw"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v want %v", got, want)
 	}

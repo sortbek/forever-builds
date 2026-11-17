@@ -99,13 +99,13 @@ func main() {
 	write(*out, "items.json", list)
 	enchants := make([]named, 0, len(db.Enchants))
 	for _, e := range db.Enchants {
-		enchants = append(enchants, named{e.EffectID, e.Name})
+		enchants = append(enchants, named{ID: e.EffectID, Name: e.Name})
 	}
 	write(*out, "enchants.json", enchants)
 	icons := make([]named, 0, len(db.SpellIcons))
 	spellIcons := map[int]string{}
 	for _, s := range db.SpellIcons {
-		icons = append(icons, named{s.ID, s.Name})
+		icons = append(icons, named{ID: s.ID, Name: s.Name})
 		spellIcons[s.ID] = s.Icon
 	}
 	spellNames, err := loadSpellNames(filepath.Join(*wago, "SpellName.csv"))
@@ -127,6 +127,18 @@ func main() {
 		}
 	}
 	spells := spellList(icons, spellNames, used)
+	spellIconIDs, err := loadSpellIconIDs(*wago)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for i := range spells {
+		id := spells[i].ID
+		if spellIcons[id] != "" {
+			spells[i].Icon = spellIcons[id]
+		} else if spellIconIDs[id] > 0 {
+			spells[i].Icon = strconv.Itoa(spellIconIDs[id]) // a FileDataID
+		}
+	}
 	write(*out, "spells.json", spells)
 	tables, err := loadTraitTables(*wago)
 	if err != nil {

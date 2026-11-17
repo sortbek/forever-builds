@@ -13,6 +13,23 @@ import (
 type named struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
+	Icon string `json:"icon,omitempty"`
+}
+
+// The client's icon FileDataID per spell, for the spells the UI database names no icon for.
+func loadSpellIconIDs(dir string) (map[int]int, error) {
+	rows, err := readCSV(filepath.Join(dir, "SpellMisc.csv"))
+	if err != nil {
+		return nil, err
+	}
+	icons := make(map[int]int, len(rows))
+	for _, r := range rows {
+		id, fdid := atoi(r["SpellID"]), atoi(r["SpellIconFileDataID"])
+		if fdid > 0 && icons[id] == 0 {
+			icons[id] = fdid
+		}
+	}
+	return icons, nil
 }
 
 var spellIDPattern = regexp.MustCompile(`SpellID:\s*(\d+)`)
@@ -59,7 +76,7 @@ func spellList(icons []named, names map[int]string, used map[int]bool) []named {
 	}
 	for id := range used {
 		if name, ok := names[id]; ok && !seen[id] && name != "" {
-			out = append(out, named{id, name})
+			out = append(out, named{ID: id, Name: name})
 		}
 	}
 	sort.Slice(out, func(a, b int) bool { return out[a].ID < out[b].ID })
