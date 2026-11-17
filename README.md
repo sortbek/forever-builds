@@ -7,6 +7,7 @@ build's defaults, so SimHammer only sends the character, gear, talents and fight
 ```
 simhammer-forever sim  --in request.json --out result.json     # RaidSimRequest in, RaidSimResult out
 simhammer-forever bulk --in request.json --out result.json     # gear sets ranked against the worn gear
+simhammer-forever drops --in request.json --out result.json    # each item worn on its own, against the worn gear
 simhammer-forever version
 ```
 

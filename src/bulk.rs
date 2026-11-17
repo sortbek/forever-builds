@@ -255,6 +255,90 @@ pub fn run(mut request: Value, max_combinations: usize) -> Result<Value, String>
     }))
 }
 
+/// Drop finder: each candidate worn on its own in place of what sits in its slot, every swap on the
+/// baseline's seed. Reads `{ baseRequest, items: [{ item, slots? }] }`, where `slots` narrows the
+/// equipment slots the item may go in (an off hand only for a dual wielder). A ring, trinket or one
+/// hander tried in two slots counts with its better one. Writes `{ baseline, results, metric }`; a
+/// result row is `{ index, slot, dpsMetrics }`, and an item already worn or that fits no slot has none.
+pub fn drops(mut request: Value) -> Result<Value, String> {
+    let mut base = request["baseRequest"].take();
+    if !base.is_object() {
+        return Err("drops request has no baseRequest".into());
+    }
+    defaults::apply(&mut base)?;
+    let iterations = base["simOptions"]["iterations"]
+        .as_u64()
+        .unwrap_or(defaults::DEFAULT_ITERATIONS);
+    let mut worn: Vec<Value> = base["raid"]["parties"][0]["players"][0]["equipment"]["items"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    worn.resize(SLOTS, json!({}));
+    let candidates = request["items"].as_array().cloned().unwrap_or_default();
+
+    let mut swaps: Vec<(usize, usize, Vec<Value>)> = Vec::new();
+    for (index, candidate) in candidates.iter().enumerate() {
+        let item = &candidate["item"];
+        if id_of(item) == 0 || worn.iter().any(|w| id_of(w) == id_of(item)) {
+            continue;
+        }
+        let allowed: Option<Vec<u64>> = candidate["slots"]
+            .as_array()
+            .map(|s| s.iter().filter_map(Value::as_u64).collect());
+        for &slot in slots_of(info(item)) {
+            if allowed
+                .as_ref()
+                .is_some_and(|a| !a.contains(&(slot as u64)))
+            {
+                continue;
+            }
+            // An off hand next to a worn two-hander means giving that up too; not a single swap.
+            if slot == OFF_HAND && is_two_hand(&worn[MAIN_HAND]) {
+                continue;
+            }
+            let mut gear = worn.clone();
+            gear[slot] = item.clone();
+            if slot == MAIN_HAND && is_two_hand(item) {
+                gear[OFF_HAND] = json!({});
+            }
+            if valid(&gear) {
+                swaps.push((index, slot, gear));
+            }
+        }
+    }
+
+    let baseline = sim_all(&base, &[&worn], iterations)
+        .pop()
+        .flatten()
+        .ok_or("the Forever engine can't sim the equipped gear; see the log")?;
+    let refs: Vec<&Vec<Value>> = swaps.iter().map(|(_, _, gear)| gear).collect();
+    let scores = sim_all(&base, &refs, iterations);
+    let mut best: Vec<Option<(usize, Value)>> = vec![None; candidates.len()];
+    for ((index, slot, _), metrics) in swaps.iter().zip(scores) {
+        let Some(metrics) = metrics else { continue };
+        if best[*index]
+            .as_ref()
+            .is_none_or(|(_, m)| avg(&metrics) > avg(m))
+        {
+            best[*index] = Some((*slot, metrics));
+        }
+    }
+    let results: Vec<Value> = best
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, row)| {
+            let (slot, metrics) = row?;
+            Some(json!({ "index": index, "slot": slot, "dpsMetrics": metrics }))
+        })
+        .collect();
+    Ok(json!({
+        "baseline": { "gear": { "items": worn }, "dpsMetrics": baseline },
+        "results": results,
+        "metric": defaults::metric_of(&base),
+        "error": null,
+    }))
+}
+
 /// Talent builds side by side on one seed. Reads `{ baseRequest, variants: [{ name, talentsString }] }`;
 /// each variant gets its own build's defaults and rotation.
 pub fn compare(mut request: Value) -> Result<Value, String> {

@@ -447,3 +447,31 @@ fn bulk_refuses_more_gear_sets_than_the_limit() {
     let error = bulk::run(bulk_request(), 1).unwrap_err();
     assert_eq!(error, "More than 1 combinations. Select fewer items.");
 }
+
+#[test]
+fn drops_sims_each_item_on_its_own_in_its_best_slot() {
+    let bulk = bulk_request();
+    let worn_ring = request("combat-rogue", &talents("rogue", 1), 200)["raid"]["parties"][0]
+        ["players"][0]["equipment"]["items"][10]
+        .clone();
+    let mut items: Vec<Value> = bulk["bulkSettings"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| json!({ "item": item }))
+        .collect();
+    items.push(json!({ "item": worn_ring })); // already worn: no row
+    items.push(json!({ "item": bulk["bulkSettings"]["items"][0], "slots": [] })); // fits no slot: no row
+    let candidates = items.len();
+    let result =
+        bulk::drops(json!({ "baseRequest": bulk["baseRequest"], "items": items })).unwrap();
+    assert!(result["baseline"]["dpsMetrics"]["avg"].as_f64().unwrap() > 0.0);
+    let rows = result["results"].as_array().unwrap();
+    assert_eq!(rows.len(), candidates - 2, "{rows:?}");
+    for row in rows {
+        assert!(row["index"].as_u64().unwrap() < candidates as u64 - 2);
+        assert!(row["slot"].as_u64().unwrap() < 17);
+        assert!(row["dpsMetrics"]["avg"].as_f64().unwrap() > 0.0);
+        assert_eq!(row["dpsMetrics"]["aggregatorData"]["n"], 200);
+    }
+}
