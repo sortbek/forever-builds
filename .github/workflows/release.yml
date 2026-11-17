@@ -29,7 +29,7 @@ jobs:
       - name: Skip when these commits are already released
         id: tag
         run: |
-          KEY="$(cut -c1-7 ENGINE_REF)-$(cut -c1-7 UIDATA_REF)"
+          KEY="$(cut -c1-7 ENGINE_REF)$(cut -c1-7 UIDATA_REF)"
           echo "tag=forever-$(date -u +%Y%m%d)-$KEY" >> "$GITHUB_OUTPUT"
           if gh release list --limit 50 | grep -q -- "-$KEY"; then echo "skip=1" >> "$GITHUB_OUTPUT"; fi
         env: { GH_TOKEN: "${{ github.token }}" }
