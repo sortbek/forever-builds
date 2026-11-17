@@ -41,6 +41,7 @@ instanceroot(64, {	-- Shadowfang Keep
 		n(QUESTS, {
 			q(1014, {	-- Arugal Must Die
 				races = HORDE_ONLY,
+				lvl = 18,
 				groups = { i(1) },
 			}),
 			{	-- Split Quest
@@ -48,6 +49,7 @@ instanceroot(64, {	-- Shadowfang Keep
 				}),
 				hordeQuestData = q(7064, {	-- Split Quest (H)
 				}),
+				lvl = { 25, 34 },
 				groups = { i(2) },
 			},
 		}),
@@ -143,7 +145,7 @@ root(ROOTS.WorldDrops, {
 			{ID: 3, From: "Trash"}, {ID: 4, From: "Baron Silverlaine"}, {ID: 7, From: "Fel Steed"},
 		}},
 		{Category: "quest", Name: "Shadowfang Keep", Items: []sourceItem{
-			{ID: 1, From: "Arugal Must Die", Side: "horde"}, {ID: 2, From: "Split Quest"},
+			{ID: 1, From: "Arugal Must Die", Side: "horde", Level: 18}, {ID: 2, From: "Split Quest", Level: 25},
 		}},
 		{Category: "pvp", Name: "Kelm Hargunth", Zone: "Warsong Gulch", Items: []sourceItem{{ID: 12, Side: "horde"}}},
 		{Category: "reputation", Name: "Warsong Outriders", Items: []sourceItem{{ID: 13, From: "Kelm Hargunth", Side: "horde", Standing: "honored"}}},

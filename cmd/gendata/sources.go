@@ -21,6 +21,8 @@ type sourceItem struct {
 	Side     string   `json:"side,omitempty"`     // horde or alliance
 	Standing string   `json:"standing,omitempty"` // reputation needed
 	Classes  []string `json:"classes,omitempty"`
+	// The level a quest can be done from; its rewards often need no level of their own.
+	Level int `json:"level,omitempty"`
 }
 
 type sourceGroup struct {
@@ -311,6 +313,7 @@ type srcCtx struct {
 	quest, vendor                     bool
 	side, faction, standing           string
 	classes                           []string
+	level                             int
 }
 
 type sourceBuilder struct {
@@ -394,6 +397,15 @@ func (b *sourceBuilder) walk(n *attNode, c srcCtx) {
 		c.instance, c.zone, c.from = g, n.name, ""
 	case "q":
 		c.quest, c.from = true, n.name
+		// lvl is a number or a { min, max } range.
+		switch lvl := n.field("lvl").(type) {
+		case lua.LNumber:
+			c.level = int(lvl)
+		case *lua.LTable:
+			if lo, ok := lvl.RawGetInt(1).(lua.LNumber); ok {
+				c.level = int(lo)
+			}
+		}
 	case "prof", "profession":
 		if c.profession == "" {
 			c.profession = humanize(n.sym)
@@ -481,6 +493,9 @@ func (b *sourceBuilder) add(id int, c srcCtx) {
 		return
 	}
 	it := sourceItem{ID: id, Side: c.side, Standing: c.standing, Classes: c.classes}
+	if c.quest {
+		it.Level = c.level
+	}
 	if g.Category != "vendor" && g.Category != "crafted" && g.Category != "pvp" {
 		it.From = c.from
 	}
