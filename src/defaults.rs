@@ -32,7 +32,7 @@ fn rotations() -> &'static Value {
     )
 }
 
-/// id -> [type, hand type, weapon type, unique].
+/// id -> [type, hand type, weapon type, unique, name].
 pub fn items() -> &'static Value {
     static CELL: OnceLock<Value> = OnceLock::new();
     embedded(&CELL, include_str!(concat!(env!("OUT_DIR"), "/items.json")))

@@ -20,6 +20,25 @@ const OFF_HAND: usize = 15;
 const DEFAULT_TOP_RESULTS: usize = 25;
 /// Above this many gear sets a low-iteration pass picks the sets worth the full run.
 const STAGED_ABOVE: usize = 50;
+const SLOT_LABELS: [&str; SLOTS] = [
+    "Head",
+    "Neck",
+    "Shoulder",
+    "Back",
+    "Chest",
+    "Wrist",
+    "Hands",
+    "Waist",
+    "Legs",
+    "Feet",
+    "Finger 1",
+    "Finger 2",
+    "Trinket 1",
+    "Trinket 2",
+    "Main Hand",
+    "Off Hand",
+    "Ranged",
+];
 
 /// The equipment slots an item type goes in.
 fn slots_of(item: &Value) -> &'static [usize] {
@@ -52,6 +71,45 @@ fn id_of(spec: &Value) -> u64 {
 
 fn info(spec: &Value) -> &'static Value {
     &defaults::items()[id_of(spec).to_string()]
+}
+
+fn name_of(spec: &Value) -> String {
+    info(spec)[4]
+        .as_str()
+        .map_or_else(|| format!("Item {}", id_of(spec)), str::to_string)
+}
+
+/// A live log line for a finished gear set: `12/313 Feline Mantle (Shoulder): 131.2 DPS (+2.4)`.
+/// SimHammer shows these in the sim's log while it runs.
+fn result_line(
+    done: usize,
+    total: usize,
+    label: &str,
+    metrics: &Value,
+    base: f64,
+    metric: &str,
+) -> String {
+    let value = avg(metrics);
+    format!(
+        "{done}/{total} {label}: {value:.1} {} ({:+.1})",
+        metric.to_uppercase(),
+        value - base
+    )
+}
+
+/// What a gear set wears in place of `worn`: the new items' names.
+fn changes(worn: &[Value], gear: &[Value]) -> String {
+    let names: Vec<String> = gear
+        .iter()
+        .zip(worn)
+        .filter(|(new, old)| id_of(new) > 0 && id_of(new) != id_of(old))
+        .map(|(new, _)| name_of(new))
+        .collect();
+    if names.is_empty() {
+        "Equipped gear".into()
+    } else {
+        names.join(" + ")
+    }
 }
 
 fn is_two_hand(spec: &Value) -> bool {
@@ -136,8 +194,14 @@ pub fn metrics(result: &Value, metric: &str, iterations: u64) -> Value {
     metrics
 }
 
-/// Sims the gear sets side by side; a set the engine refuses gives `None`.
-fn sim_all(base: &Value, sets: &[&Vec<Value>], iterations: u64) -> Vec<Option<Value>> {
+/// Sims the gear sets side by side; a set the engine refuses gives `None`. `on_done` hears each
+/// set that simmed, with how many have finished.
+fn sim_all(
+    base: &Value,
+    sets: &[&Vec<Value>],
+    iterations: u64,
+    on_done: &(dyn Fn(usize, usize, &Value) + Sync),
+) -> Vec<Option<Value>> {
     let next = AtomicUsize::new(0);
     let done = AtomicUsize::new(0);
     let results = Mutex::new(vec![None; sets.len()]);
@@ -152,10 +216,13 @@ fn sim_all(base: &Value, sets: &[&Vec<Value>], iterations: u64) -> Vec<Option<Va
                 if i >= sets.len() {
                     break;
                 }
-                match engine::simulate(&with_gear(base, sets[i], iterations)) {
+                let outcome = engine::simulate(&with_gear(base, sets[i], iterations));
+                let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
+                match outcome {
                     Ok(result) => {
-                        results.lock().unwrap()[i] =
-                            Some(metrics(&result, defaults::metric_of(base), iterations))
+                        let metrics = metrics(&result, defaults::metric_of(base), iterations);
+                        on_done(i, finished, &metrics);
+                        results.lock().unwrap()[i] = Some(metrics);
                     }
                     Err(reason) => {
                         if refused.lock().unwrap().insert(reason.clone()) {
@@ -163,11 +230,7 @@ fn sim_all(base: &Value, sets: &[&Vec<Value>], iterations: u64) -> Vec<Option<Va
                         }
                     }
                 }
-                eprintln!(
-                    "progress {} {}",
-                    done.fetch_add(1, Ordering::Relaxed) + 1,
-                    sets.len()
-                );
+                eprintln!("progress {finished} {}", sets.len());
             });
         }
     });
@@ -217,16 +280,30 @@ pub fn run(mut request: Value, max_combinations: usize) -> Result<Value, String>
     let sets = search.sets;
     let (baseline_set, others) = sets.split_first().ok_or("no gear to sim")?;
 
-    let baseline = sim_all(&base, &[baseline_set], iterations)
-        .pop()
-        .flatten()
-        .ok_or("the Forever engine can't sim the equipped gear; see the log")?;
+    let metric = defaults::metric_of(&base);
+    let baseline = sim_all(&base, &[baseline_set], iterations, &|_, _, m| {
+        eprintln!("Equipped gear: {:.1} {}", avg(m), metric.to_uppercase())
+    })
+    .pop()
+    .flatten()
+    .ok_or("the Forever engine can't sim the equipped gear; see the log")?;
+    let base_avg = avg(&baseline);
 
     let mut survivors: Vec<usize> = (0..others.len()).collect();
     if others.len() > STAGED_ABOVE {
         let low = (iterations / 10).clamp(200, iterations);
         let refs: Vec<&Vec<Value>> = others.iter().collect();
-        let scores = sim_all(&base, &refs, low);
+        eprintln!(
+            "Quick pass over {} gear sets at {low} iterations",
+            refs.len()
+        );
+        let scores = sim_all(&base, &refs, low, &|i, done, m| {
+            let label = changes(baseline_set, &others[i]);
+            eprintln!(
+                "{}",
+                result_line(done, refs.len(), &label, m, base_avg, metric)
+            );
+        });
         survivors.retain(|&i| scores[i].is_some());
         survivors.sort_by(|&a, &b| {
             avg(scores[b].as_ref().unwrap()).total_cmp(&avg(scores[a].as_ref().unwrap()))
@@ -234,7 +311,19 @@ pub fn run(mut request: Value, max_combinations: usize) -> Result<Value, String>
         survivors.truncate(top.max(DEFAULT_TOP_RESULTS));
     }
     let refs: Vec<&Vec<Value>> = survivors.iter().map(|&i| &others[i]).collect();
-    let finals = sim_all(&base, &refs, iterations);
+    if others.len() > STAGED_ABOVE {
+        eprintln!(
+            "Full run of the best {} at {iterations} iterations",
+            refs.len()
+        );
+    }
+    let finals = sim_all(&base, &refs, iterations, &|i, done, m| {
+        let label = changes(baseline_set, refs[i]);
+        eprintln!(
+            "{}",
+            result_line(done, refs.len(), &label, m, base_avg, metric)
+        );
+    });
     let mut ranked: Vec<(usize, Value)> = survivors
         .iter()
         .zip(finals)
@@ -250,7 +339,7 @@ pub fn run(mut request: Value, max_combinations: usize) -> Result<Value, String>
     Ok(json!({
         "baseline": { "candidateIndex": -1, "gear": { "items": baseline_set }, "dpsMetrics": baseline },
         "topResults": top_results,
-        "metric": defaults::metric_of(&base),
+        "metric": metric,
         "error": null,
     }))
 }
@@ -307,12 +396,27 @@ pub fn drops(mut request: Value) -> Result<Value, String> {
         }
     }
 
-    let baseline = sim_all(&base, &[&worn], iterations)
-        .pop()
-        .flatten()
-        .ok_or("the Forever engine can't sim the equipped gear; see the log")?;
+    let metric = defaults::metric_of(&base);
+    let baseline = sim_all(&base, &[&worn], iterations, &|_, _, m| {
+        eprintln!("Equipped gear: {:.1} {}", avg(m), metric.to_uppercase())
+    })
+    .pop()
+    .flatten()
+    .ok_or("the Forever engine can't sim the equipped gear; see the log")?;
+    let base_avg = avg(&baseline);
     let refs: Vec<&Vec<Value>> = swaps.iter().map(|(_, _, gear)| gear).collect();
-    let scores = sim_all(&base, &refs, iterations);
+    let scores = sim_all(&base, &refs, iterations, &|i, done, m| {
+        let (index, slot, _) = &swaps[i];
+        let label = format!(
+            "{} ({})",
+            name_of(&candidates[*index]["item"]),
+            SLOT_LABELS[*slot]
+        );
+        eprintln!(
+            "{}",
+            result_line(done, refs.len(), &label, m, base_avg, metric)
+        );
+    });
     let mut best: Vec<Option<(usize, Value)>> = vec![None; candidates.len()];
     for ((index, slot, _), metrics) in swaps.iter().zip(scores) {
         let Some(metrics) = metrics else { continue };
@@ -334,7 +438,7 @@ pub fn drops(mut request: Value) -> Result<Value, String> {
     Ok(json!({
         "baseline": { "gear": { "items": worn }, "dpsMetrics": baseline },
         "results": results,
-        "metric": defaults::metric_of(&base),
+        "metric": metric,
         "error": null,
     }))
 }
@@ -364,12 +468,21 @@ pub fn compare(mut request: Value) -> Result<Value, String> {
                     request["simOptions"]["randomSeed"] = seed.clone();
                     let iterations = request["simOptions"]["iterations"].as_u64().unwrap_or(defaults::DEFAULT_ITERATIONS);
                     let outcome = defaults::apply(&mut request).and_then(|()| engine::simulate(&request));
-                    eprintln!("progress {} {total}", done.fetch_add(1, Ordering::Relaxed) + 1);
+                    let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
+                    let name = variant["name"].as_str().unwrap_or("Build");
                     let mut row = json!({ "name": variant["name"], "talentsString": variant["talentsString"] });
                     match outcome {
-                        Ok(result) => row["metrics"] = metrics(&result, defaults::metric_of(&request), iterations),
-                        Err(reason) => row["error"] = json!(reason),
+                        Ok(result) => {
+                            let metric = defaults::metric_of(&request);
+                            row["metrics"] = metrics(&result, metric, iterations);
+                            eprintln!("{finished}/{total} {name}: {:.1} {}", avg(&row["metrics"]), metric.to_uppercase());
+                        }
+                        Err(reason) => {
+                            eprintln!("{finished}/{total} {name}: skipped, {reason}");
+                            row["error"] = json!(reason);
+                        }
                     }
+                    eprintln!("progress {finished} {total}");
                     row
                 })
             })
@@ -380,4 +493,22 @@ pub fn compare(mut request: Value) -> Result<Value, String> {
             .collect()
     });
     Ok(json!({ "metric": defaults::metric_of(&base), "results": results }))
+}
+
+#[cfg(test)]
+mod log_tests {
+    use super::*;
+
+    #[test]
+    fn a_result_line_names_the_gear_and_what_it_gains() {
+        let metrics = json!({ "avg": 131.24 });
+        assert_eq!(
+            result_line(12, 313, "Feline Mantle (Shoulder)", &metrics, 128.8, "dps"),
+            "12/313 Feline Mantle (Shoulder): 131.2 DPS (+2.4)"
+        );
+        let worn = vec![json!({ "id": 25 }), json!({})];
+        let gear = vec![json!({ "id": 25 }), json!({ "id": 35 })];
+        assert_eq!(changes(&worn, &gear), "Bent Staff");
+        assert_eq!(changes(&worn, &worn), "Equipped gear");
+    }
 }

@@ -54,7 +54,8 @@ fn main() {
     }
     println!("cargo:rerun-if-env-changed=SIMHAMMER_FOREVER_VERSION");
 
-    // id -> [type, hand type, weapon type, unique]; the bulk sim slots candidates by these.
+    // id -> [type, hand type, weapon type, unique, name]; the bulk sim slots candidates by these
+    // and names them in its log.
     let mut items = BTreeMap::new();
     let lines = fs::read_to_string(root.join("engine/data/items.jsonl"))
         .expect("engine/data/items.jsonl: run scripts/sync-engine.sh");
@@ -69,7 +70,8 @@ fn main() {
                 kind,
                 item["hand_type"],
                 item["weapon_type"],
-                item["unique"].as_bool().unwrap_or(false)
+                item["unique"].as_bool().unwrap_or(false),
+                item["name"]
             ]),
         );
     }
