@@ -4,7 +4,7 @@
 use std::{
     collections::HashSet,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         Mutex,
     },
     thread,
@@ -194,12 +194,34 @@ pub fn metrics(result: &Value, metric: &str, iterations: u64) -> Value {
     metrics
 }
 
+/// A run's progress over all of its passes, counted in iterations, so the bar moves once from 0 to
+/// 100 and a pass at a tenth of the iterations weighs a tenth.
+struct Work {
+    done: AtomicU64,
+    total: u64,
+}
+
+impl Work {
+    fn new(total: u64) -> Self {
+        Self {
+            done: AtomicU64::new(0),
+            total: total.max(1),
+        }
+    }
+
+    fn add(&self, iterations: u64) {
+        let done = self.done.fetch_add(iterations, Ordering::Relaxed) + iterations;
+        eprintln!("progress {} {}", done.min(self.total), self.total);
+    }
+}
+
 /// Sims the gear sets side by side; a set the engine refuses gives `None`. `on_done` hears each
 /// set that simmed, with how many have finished.
 fn sim_all(
     base: &Value,
     sets: &[&Vec<Value>],
     iterations: u64,
+    work: &Work,
     on_done: &(dyn Fn(usize, usize, &Value) + Sync),
 ) -> Vec<Option<Value>> {
     let next = AtomicUsize::new(0);
@@ -230,7 +252,7 @@ fn sim_all(
                         }
                     }
                 }
-                eprintln!("progress {finished} {}", sets.len());
+                work.add(iterations);
             });
         }
     });
@@ -281,7 +303,15 @@ pub fn run(mut request: Value, max_combinations: usize) -> Result<Value, String>
     let (baseline_set, others) = sets.split_first().ok_or("no gear to sim")?;
 
     let metric = defaults::metric_of(&base);
-    let baseline = sim_all(&base, &[baseline_set], iterations, &|_, _, m| {
+    let staged = others.len() > STAGED_ABOVE;
+    let low = (iterations / 10).clamp(200, iterations);
+    let n = others.len() as u64;
+    let work = Work::new(if staged {
+        iterations + n * low + n.min(top.max(DEFAULT_TOP_RESULTS) as u64) * iterations
+    } else {
+        iterations + n * iterations
+    });
+    let baseline = sim_all(&base, &[baseline_set], iterations, &work, &|_, _, m| {
         eprintln!("Equipped gear: {:.1} {}", avg(m), metric.to_uppercase())
     })
     .pop()
@@ -290,14 +320,13 @@ pub fn run(mut request: Value, max_combinations: usize) -> Result<Value, String>
     let base_avg = avg(&baseline);
 
     let mut survivors: Vec<usize> = (0..others.len()).collect();
-    if others.len() > STAGED_ABOVE {
-        let low = (iterations / 10).clamp(200, iterations);
+    if staged {
         let refs: Vec<&Vec<Value>> = others.iter().collect();
         eprintln!(
             "Quick pass over {} gear sets at {low} iterations",
             refs.len()
         );
-        let scores = sim_all(&base, &refs, low, &|i, done, m| {
+        let scores = sim_all(&base, &refs, low, &work, &|i, done, m| {
             let label = changes(baseline_set, &others[i]);
             eprintln!(
                 "{}",
@@ -311,13 +340,13 @@ pub fn run(mut request: Value, max_combinations: usize) -> Result<Value, String>
         survivors.truncate(top.max(DEFAULT_TOP_RESULTS));
     }
     let refs: Vec<&Vec<Value>> = survivors.iter().map(|&i| &others[i]).collect();
-    if others.len() > STAGED_ABOVE {
+    if staged {
         eprintln!(
             "Full run of the best {} at {iterations} iterations",
             refs.len()
         );
     }
-    let finals = sim_all(&base, &refs, iterations, &|i, done, m| {
+    let finals = sim_all(&base, &refs, iterations, &work, &|i, done, m| {
         let label = changes(baseline_set, refs[i]);
         eprintln!(
             "{}",
@@ -397,7 +426,8 @@ pub fn drops(mut request: Value) -> Result<Value, String> {
     }
 
     let metric = defaults::metric_of(&base);
-    let baseline = sim_all(&base, &[&worn], iterations, &|_, _, m| {
+    let work = Work::new(iterations * (1 + swaps.len() as u64));
+    let baseline = sim_all(&base, &[&worn], iterations, &work, &|_, _, m| {
         eprintln!("Equipped gear: {:.1} {}", avg(m), metric.to_uppercase())
     })
     .pop()
@@ -405,7 +435,7 @@ pub fn drops(mut request: Value) -> Result<Value, String> {
     .ok_or("the Forever engine can't sim the equipped gear; see the log")?;
     let base_avg = avg(&baseline);
     let refs: Vec<&Vec<Value>> = swaps.iter().map(|(_, _, gear)| gear).collect();
-    let scores = sim_all(&base, &refs, iterations, &|i, done, m| {
+    let scores = sim_all(&base, &refs, iterations, &work, &|i, done, m| {
         let (index, slot, _) = &swaps[i];
         let label = format!(
             "{} ({})",
